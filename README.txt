@@ -1,7 +1,7 @@
 Calibre Power Search Plugin
 ===========================
 
-Version 1.0.0, released on 23 Jul 2020. Created by Michael Apozyan
+Version 1.1.0, released on 26 Jul 2020. Created by Michael Apozyan
 
 Overview
 --------
@@ -22,7 +22,6 @@ Requirements
     In order to use Power Search Plugin you need to have ElasticSearch service up and running.
     Please follow the instructions provided on the official website to install it:
     https://www.elastic.co/guide/en/elasticsearch/reference/current/getting-started-install.html
-
 
 * Pdftotext utility (optional)
     Generally, Power Search Plugin is using Calibre's native converters to build full-text index.
