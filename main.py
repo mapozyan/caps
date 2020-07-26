@@ -5,15 +5,13 @@ import subprocess
 import threading
 import time
 
+from calibre_plugins.caps.config import prefs
 from elasticsearch import Elasticsearch, NotFoundError
 from PyQt5 import Qt
-from PyQt5.QtCore import Qt as QtCore
+from PyQt5.QtCore import Qt as QtCore, pyqtSlot, pyqtSignal, QObject
 
 TITLE = 'Power Search'
-# SUPPORTED_FORMATS = ['DJVU', 'PDF']
 SUPPORTED_FORMATS = ['CHM', 'CBZ', 'FB2', 'PDB', 'DJVU', 'EPUB', 'MOBI', 'DOCX', 'PDF', 'TXT', 'RTF', 'DJV']
-
-elastic_search_client = None
 
 FNULL = open(os.devnull, 'w')
 
@@ -39,37 +37,28 @@ def which(program):
 def concat(book_id, format):
     return '{}:{}'.format(book_id, format)
 
-def invoke(args):
-    try:
-        global elastic_search_client
-        if elastic_search_client is None:
-            elastic_search_client = Elasticsearch([args['elasticsearch_url']], timeout=20.0)
+class WorkerSignals(QObject):
+    finished = pyqtSignal()
+    error = pyqtSignal(tuple)
+    result = pyqtSignal(object)
 
-        id = concat(args['book_id'], args['format'])
-        print('Book {} start processing'.format(id))
-        if args['format'] == 'PDF' and args['pdftotext']:
-            subprocess.call([args['pdftotext'], '-enc', 'UTF-8', args['input'], args['output']], stdout=FNULL, stderr=FNULL)
-        else:
-            subprocess.call(['ebook-convert', args['input'], args['output']], stdout=FNULL, stderr=FNULL)
-        print('Book {} converted to plaintext'.format(id))
+class AsyncWorker(Qt.QRunnable):
 
-        content = open(args['output']).readlines()
-        doc = {
-            'metadata': args['metadata'],
-            'content': content
-        }
-        res = elastic_search_client.index(index="library", id=id, body=doc)
-        print('Book {} "{}" in index'.format(id, res['result']))
+    def __init__(self, fn, *args, **kwargs):
+        super(AsyncWorker, self).__init__()
+        self.fn = fn
+        self.args = args
+        self.kwargs = kwargs
+        self.signals = WorkerSignals()
 
-    except Exception as ex:
-        print(ex)
+    @pyqtSlot()
+    def run(self):
+        self.fn(*self.args, **self.kwargs)
+        self.signals.finished.emit()
 
 class SearchDialog(Qt.QDialog):
 
     def __init__(self, plugin, gui, icon):
-
-        from calibre_plugins.caps.config import prefs
-        global elastic_search_client
 
         Qt.QDialog.__init__(self, gui)
         self.plugin = plugin
@@ -128,130 +117,162 @@ class SearchDialog(Qt.QDialog):
 
         self.resize(self.sizeHint())
 
-        elastic_search_client = Elasticsearch([prefs['elasticsearch_url']], timeout=20.0)
+        self.thread_pool = Qt.QThreadPool()
+
+        self.add_workers_submitted = 0
+        self.add_workers_complete = 0
+
+        self.delete_workers_submitted = 0
+        self.delete_workers_complete = 0
+
+        self.index_state = {}
 
     def on_search(self):
 
-        thread_started = False
+        self._set_searching_mode()
 
-        try:
-            self._set_searching_mode()
+        self.canceled = threading.Event()
 
-            self.canceled = False
+        self.elastic_search_client = Elasticsearch([prefs['elasticsearch_url']], timeout=20.0)
 
-            from calibre_plugins.caps.config import prefs
+        if not self.elastic_search_client.ping():
+            from calibre.gui2 import error_dialog
+            error_dialog(
+                self,
+                TITLE,
+                'Could not connect to ElasticSearch cluster. Please make sure that it\'s running.',
+                show=True)
+            self._set_idle_mode()
+            return
 
-            if not elastic_search_client.ping():
-                msgbox = Qt.QMessageBox(
-                    Qt.QMessageBox.Warning,
-                    TITLE,
-                    'Could not connect to ElasticSearch cluster. Please make sure that it\'s running.',
-                    Qt.QMessageBox.Ok)
-                msgbox.exec_()
-                self._set_idle_mode()
-                return
+        self.index_state = prefs.get(self.db.library_id, {}).get('index_state', {})
 
-            index_state = prefs.get(self.db.library_id, {}).get('index_state', {})
+        all_formats = set()
+        self.update_list = []
+        self.delete_list = []
 
-            all_formats = set()
-            update_list = []
-            delete_list = []
+        epoch = datetime.datetime(1, 1, 1, 0, 0, tzinfo=dateutil.tz.tzutc())
 
-            epoch = datetime.datetime(1, 1, 1, 0, 0, tzinfo=dateutil.tz.tzutc())
+        pdftotext_full_path = None
 
-            pdftotext_full_path = None
+        pdftotext = prefs['pdftotext_path']
 
-            pdftotext = prefs['pdftotext_path']
+        if is_exe(pdftotext):
+            pdftotext_full_path = pdftotext
+        elif os.path.sep not in pdftotext:
+            pdftotext_full_path = which(pdftotext)
 
-            if is_exe(pdftotext):
-                pdftotext_full_path = pdftotext
-            elif os.path.sep not in pdftotext:
-                pdftotext_full_path = which(pdftotext)
+        for book_id in self.db.all_book_ids():
+            for format in self.db.formats(book_id):
+                if format in SUPPORTED_FORMATS:
+                    last_modified = self.db.format_metadata(book_id, format)['mtime']
+                    key = concat(book_id, format)
+                    all_formats.add(key)
+                    if self.index_state.get(key, epoch) < last_modified:
+                        self.update_list.append({
+                            'book_id': book_id,
+                            'format': format,
+                            'metadata': str(self.db.get_metadata(book_id)),
+                            'input': self.db.format_abspath(book_id, format),
+                            'output': self.plugin.temporary_file(suffix='.txt').name,
+                            'last_modified': last_modified,
+                            'pdftotext': pdftotext_full_path
+                        })
 
-            for book_id in self.db.all_book_ids():
-                for format in self.db.formats(book_id):
-                    if format in SUPPORTED_FORMATS:
-                        last_modified = self.db.format_metadata(book_id, format)['mtime']
-                        key = concat(book_id, format)
-                        all_formats.add(key)
-                        if index_state.get(key, epoch) < last_modified:
-                            update_list.append({
-                                'book_id': book_id,
-                                'format': format,
-                                'metadata': str(self.db.get_metadata(book_id)),
-                                'input': self.db.format_abspath(book_id, format),
-                                'output': self.plugin.temporary_file(suffix='.txt').name,
-                                'last_modified': last_modified,
-                                'pdftotext': pdftotext_full_path,
-                                'elasticsearch_url': prefs['elasticsearch_url']
-                            })
+        self.delete_list = [k for k in self.index_state.keys() if k not in all_formats]
 
-            delete_list = [k for k in index_state.keys() if k not in all_formats]
 
-            if len(update_list) + len(delete_list) > 0:
-                threading.Thread(target=self.search_async, args=(index_state, update_list, delete_list)).start()
-                thread_started = True
-            else:
-                self.do_search()
-
-        finally:
-            if not thread_started:
-                self._set_idle_mode()
-
-    def search_async(self, index_state, update_list, delete_list):
-
-        from calibre_plugins.caps.multiprocessing_patch.patched_pool import PatchedPool
-        from calibre_plugins.caps.config import prefs
-
-        try:
-            self.progress_bar.setMaximum(len(update_list) + len(delete_list) / 20)
-
-            for i, k in enumerate(delete_list):
-                elastic_search_client.delete(index="library", id=k, ignore=[404])
-                print('Deleted {}'.format(k))
-                del index_state[k]
-                if i % 20 == 0:
-                    self.progress_bar.setValue(self.progress_bar.value() + 1)
-
-            if prefs['concurrency'] == 1:
-                for curr in update_list:
-                    if self.canceled:
-                        break
-                    invoke(curr)
-                    self.progress_bar.setValue(self.progress_bar.value() + 1)
-            else:
-                pool = PatchedPool(processes=prefs['concurrency'])
-                res = pool.map_async(invoke, update_list, chunksize=1)
-                while not res.ready() and not self.canceled:
-                    self.progress_bar.setValue(len(update_list) - res._number_left)
-                    res.wait(timeout=0.2)
-                if self.canceled:
-                    pool.terminate()
-                else:
-                    pool.close()
-                pool.join()
-
-            for curr in update_list:
-                key = concat(curr['book_id'], curr['format'])
-                index_state[key] = curr['last_modified']
-
-            if self.canceled:
-                self.progress_bar.setValue(0)
-            else:
-                self.progress_bar.setValue(self.progress_bar.maximum())
-                prefs[self.db.library_id] = {'index_state': index_state}
-
+        if len(self.update_list) + len(self.delete_list) > 0:
+            self.thread_pool.setMaxThreadCount(prefs['concurrency'])
+            self.add_workers_submitted = len(self.update_list)
+            self.add_workers_complete = 0
+            self.delete_workers_submitted = len(self.delete_list)
+            self.delete_workers_complete = 0
+            self.progress_bar.setMaximum(len(self.update_list) + len(self.delete_list) / 20)
+            for curr in self.update_list:
+                worker = AsyncWorker(self.add_book, curr)
+                worker.signals.finished.connect(self.add_worker_complete)
+                self.thread_pool.start(worker)
+            for curr in self.delete_list:
+                worker = AsyncWorker(self.delete_book, curr)
+                worker.signals.finished.connect(self.delete_worker_complete)
+                self.thread_pool.start(worker)
+        else:
+            self._set_idle_mode()
             self.do_search()
 
-        finally:
-            self._set_idle_mode()
+
+    def add_worker_complete(self):
+        if not self.canceled.is_set():
+            self.progress_bar.setValue(self.progress_bar.value() + 1)
+        self.add_workers_complete += 1
+        self._check_work_complete()
+
+    def delete_worker_complete(self):
+        if not self.canceled.is_set():
+            if self.delete_workers_complete % 20 == 0:
+                self.progress_bar.setValue(self.progress_bar.value() + 1)
+        self.delete_workers_complete += 1
+        self._check_work_complete()
+
+    def _check_work_complete(self):
+        if self.add_workers_complete != self.add_workers_submitted or self.delete_workers_complete != self.delete_workers_submitted:
+            return
+
+        if self.canceled.is_set():
+            self.progress_bar.setValue(0)
+        else:
+            self.progress_bar.setValue(self.progress_bar.maximum())
+            prefs[self.db.library_id] = {'index_state': self.index_state}
+
+        self.workers_submitted = 0
+        self.workers_complete = 0
+
+        self._set_idle_mode()
+        self.do_search()
+
+    def add_book(self, args):
+
+        try:
+            if self.canceled.is_set():
+                return
+            id = concat(args['book_id'], args['format'])
+            # print('Book {} start processing'.format(id))
+            if args['format'] == 'PDF' and args['pdftotext']:
+                subprocess.call([args['pdftotext'], '-enc', 'UTF-8', args['input'], args['output']], stdout=FNULL, stderr=FNULL)
+            else:
+                subprocess.call(['ebook-convert', args['input'], args['output']], stdout=FNULL, stderr=FNULL)
+            # print('Book {} converted to plaintext'.format(id))
+
+            content = open(args['output']).readlines()
+            doc = {
+                'metadata': args['metadata'],
+                'content': content
+            }
+            res = self.elastic_search_client.index(index="library", id=id, body=doc)
+            # print('Book {} "{}" in index'.format(id, res['result']))
+
+            self.index_state[id] = args['last_modified']
+
+        except Exception as ex:
+            print(ex)
+
+    def delete_book(self, id):
+        try:
+            self.elastic_search_client.delete(index="library", id=id, ignore=[404])
+            # print('Deleted {}'.format(id))
+            del self.index_state[id]
+
+        except Exception as ex:
+            print(ex)
+
 
     def do_search(self):
 
         matched_ids = []
 
         req = '{{ "_source": false, "query": {{ "match": {{ "content": "{}"}}}}}}'.format(self.search_textbox.text())
-        res = elastic_search_client.search(index="library", body=req)
+        res = self.elastic_search_client.search(index="library", body=req)
 
         hits_number = res['hits']['total']['value']
         page_size = len(res['hits']['hits'])
@@ -262,7 +283,7 @@ class SearchDialog(Qt.QDialog):
                     self.search_textbox.text(),
                     i,
                     page_size)
-                res = elastic_search_client.search(index="library", body=req_paged)
+                res = self.elastic_search_client.search(index="library", body=req_paged)
 
             curr = res['hits']['hits'].pop(0)
             matched_ids.append(int(curr['_id'].split(':')[0]))
@@ -292,7 +313,7 @@ class SearchDialog(Qt.QDialog):
         self.progress_bar.setVisible(True)
 
     def on_cancel(self):
-        self.canceled = True
+        self.canceled.set()
         self.cancel_button.setText('Cancelling...')
         self.cancel_button.setEnabled(False)
 
@@ -304,8 +325,8 @@ class SearchDialog(Qt.QDialog):
             Qt.QDialog.reject(self)
 
     def on_readme(self):
-            text = get_resources('README.txt')
-            Qt.QMessageBox.about(self, TITLE, '<html><body><pre>{}</pre></body></html>'.format(text.decode('utf-8')))
+        text = get_resources('README.txt')
+        Qt.QMessageBox.about(self, TITLE, '<html><body><pre>{}</pre></body></html>'.format(text.decode('utf-8')))
 
     def on_config(self):
         self.plugin.do_user_config(parent=self)
