@@ -1,6 +1,7 @@
 import datetime
 import dateutil.tz
 import os
+import platform
 import subprocess
 import threading
 import time
@@ -14,6 +15,11 @@ TITLE = 'Power Search'
 SUPPORTED_FORMATS = ['CHM', 'CBZ', 'FB2', 'PDB', 'DJVU', 'EPUB', 'MOBI', 'DOCX', 'PDF', 'TXT', 'RTF', 'DJV']
 
 FNULL = open(os.devnull, 'w')
+
+SUBPROCESS_CREATION_FLAGS = {
+    'Linux':   0,
+    'Windows': 0x00000008 # DETACHED_PROCESS
+}
 
 if False:
     get_resources = lambda x: x
@@ -238,10 +244,11 @@ class SearchDialog(Qt.QDialog):
                 return
             id = concat(args['book_id'], args['format'])
             # print('Book {} start processing'.format(id))
+            creationflags = SUBPROCESS_CREATION_FLAGS[platform.system()]
             if args['format'] == 'PDF' and args['pdftotext']:
-                subprocess.call([args['pdftotext'], '-enc', 'UTF-8', args['input'], args['output']], stdout=FNULL, stderr=FNULL)
+                subprocess.call([args['pdftotext'], '-enc', 'UTF-8', args['input'], args['output']], stdout=FNULL, stderr=FNULL, creationflags=creationflags)
             else:
-                subprocess.call(['ebook-convert', args['input'], args['output']], stdout=FNULL, stderr=FNULL)
+                subprocess.call(['ebook-convert', args['input'], args['output']], stdout=FNULL, stderr=FNULL, creationflags=creationflags)
             # print('Book {} converted to plaintext'.format(id))
 
             content = open(args['output']).readlines()
