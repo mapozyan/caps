@@ -1,5 +1,6 @@
 import datetime
 import dateutil.tz
+import json
 import os
 import platform
 import subprocess
@@ -12,7 +13,7 @@ from PyQt5 import Qt
 from PyQt5.QtCore import Qt as QtCore, pyqtSlot, pyqtSignal, QObject
 
 TITLE = 'Power Search'
-SUPPORTED_FORMATS = ['CHM', 'CBZ', 'FB2', 'PDB', 'DJVU', 'EPUB', 'MOBI', 'DOCX', 'PDF', 'TXT', 'RTF', 'DJV']
+SUPPORTED_FORMATS = ['CHM', 'CBZ', 'FB2', 'PDB', 'DJVU', 'EPUB', 'MOBI', 'DOC', 'DOCX', 'PDF', 'TXT', 'RTF', 'DJV', 'AZW3', 'KFX']
 
 FNULL = open(os.devnull, 'w')
 
@@ -23,6 +24,7 @@ SUBPROCESS_CREATION_FLAGS = {
 
 if False:
     get_resources = lambda x: x
+    get_icons = lambda x: x
 
 def is_exe(fpath):
     return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
@@ -44,7 +46,8 @@ def concat(book_id, format):
     return '{}:{}'.format(book_id, format)
 
 class WorkerSignals(QObject):
-    finished = pyqtSignal()
+    started = pyqtSignal(dict)
+    finished = pyqtSignal(dict)
     error = pyqtSignal(tuple)
     result = pyqtSignal(object)
 
@@ -59,8 +62,9 @@ class AsyncWorker(Qt.QRunnable):
 
     @pyqtSlot()
     def run(self):
+        self.signals.started.emit(*self.args, **self.kwargs)
         self.fn(*self.args, **self.kwargs)
-        self.signals.finished.emit()
+        self.signals.finished.emit(*self.args, **self.kwargs)
 
 class SearchDialog(Qt.QDialog):
 
@@ -78,8 +82,6 @@ class SearchDialog(Qt.QDialog):
 
         self.layout = Qt.QVBoxLayout()
         self.setLayout(self.layout)
-
-        self.layout.addSpacing(20)
 
         self.search_label = Qt.QLabel('Enter text to search in content')
         self.layout.addWidget(self.search_label)
@@ -102,12 +104,28 @@ class SearchDialog(Qt.QDialog):
 
         self.progress_bar = Qt.QProgressBar(self)
         self.progress_bar.setVisible(False)
-        policy = self.progress_bar.sizePolicy()
-        policy.setRetainSizeWhenHidden(True)
-        self.progress_bar.setSizePolicy(policy)
+        retain_size_policy = self.progress_bar.sizePolicy()
+        retain_size_policy.setRetainSizeWhenHidden(True)
+        self.progress_bar.setSizePolicy(retain_size_policy)
         self.layout.addWidget(self.progress_bar)
 
-        self.layout.addSpacing(20)
+        self.details_button = Qt.QPushButton('&Details', self)
+        self.details_button.setVisible(False)
+        retain_size_policy = self.details_button.sizePolicy()
+        retain_size_policy.setRetainSizeWhenHidden(True)
+        self.details_button.setSizePolicy(retain_size_policy)
+        self.details_button.setFlat(True)
+        self.details_button.setStyleSheet('text-align: left')
+        icon = get_icons('images/right-arrow.png')
+        self.details_button.setIcon(icon)
+        self.details_button.clicked.connect(self.on_details)
+        self.layout.addWidget(self.details_button)
+
+        self.details = Qt.QListWidget(self)
+        self.details.setVisible(False)
+        self.layout.addWidget(self.details)
+
+        self.layout.addStretch()
 
         self.conf_button = Qt.QPushButton('&Options...', self)
         self.conf_button.clicked.connect(self.on_config)
@@ -121,8 +139,6 @@ class SearchDialog(Qt.QDialog):
         self.close_button.clicked.connect(self.close)
         self.layout.addWidget(self.close_button)
 
-        self.resize(self.sizeHint())
-
         self.thread_pool = Qt.QThreadPool()
 
         self.add_workers_submitted = 0
@@ -132,6 +148,18 @@ class SearchDialog(Qt.QDialog):
         self.delete_workers_complete = 0
 
         self.index_state = {}
+
+    def _get_pdftotext_full_path(self):
+        pdftotext_full_path = None
+
+        pdftotext = prefs['pdftotext_path']
+
+        if is_exe(pdftotext):
+            pdftotext_full_path = pdftotext
+        elif os.path.sep not in pdftotext:
+            pdftotext_full_path = which(pdftotext)
+
+        return pdftotext_full_path
 
     def on_search(self):
 
@@ -159,14 +187,7 @@ class SearchDialog(Qt.QDialog):
 
         epoch = datetime.datetime(1, 1, 1, 0, 0, tzinfo=dateutil.tz.tzutc())
 
-        pdftotext_full_path = None
-
-        pdftotext = prefs['pdftotext_path']
-
-        if is_exe(pdftotext):
-            pdftotext_full_path = pdftotext
-        elif os.path.sep not in pdftotext:
-            pdftotext_full_path = which(pdftotext)
+        pdftotext_full_path = self._get_pdftotext_full_path()
 
         for book_id in self.db.all_book_ids():
             for format in self.db.formats(book_id):
@@ -197,24 +218,37 @@ class SearchDialog(Qt.QDialog):
             self.progress_bar.setMaximum(len(self.update_list) + len(self.delete_list) / 20)
             for curr in self.update_list:
                 worker = AsyncWorker(self.add_book, curr)
+                worker.signals.started.connect(self.add_worker_started)
                 worker.signals.finished.connect(self.add_worker_complete)
                 self.thread_pool.start(worker)
             for curr in self.delete_list:
-                worker = AsyncWorker(self.delete_book, curr)
+                worker = AsyncWorker(self.delete_book, {'book_id': curr})
                 worker.signals.finished.connect(self.delete_worker_complete)
                 self.thread_pool.start(worker)
         else:
             self._set_idle_mode()
             self.do_search()
 
+    def add_worker_started(self, args):
+        id = concat(args['book_id'], args['format'])
+        item = Qt.QListWidgetItem('Converting {}'.format(args['input']))
+        item.setData(QtCore.UserRole, id)
+        self.details.addItem(item)
 
-    def add_worker_complete(self):
+    def add_worker_complete(self, args):
+        id = concat(args['book_id'], args['format'])
+        for i in range(self.details.count()):
+            item = self.details.item(i)
+            curr_id = item.data(QtCore.UserRole)
+            if curr_id == id:
+                self.details.takeItem(i)
+                break
         if not self.canceled.is_set():
             self.progress_bar.setValue(self.progress_bar.value() + 1)
         self.add_workers_complete += 1
         self._check_work_complete()
 
-    def delete_worker_complete(self):
+    def delete_worker_complete(self, args):
         if not self.canceled.is_set():
             if self.delete_workers_complete % 20 == 0:
                 self.progress_bar.setValue(self.progress_bar.value() + 1)
@@ -273,24 +307,47 @@ class SearchDialog(Qt.QDialog):
         except Exception as ex:
             print(ex)
 
+    def _parse_search_query(self):
+        parts = [part.strip() for part in self.search_textbox.text().split('"')]
+        words = ' '.join(parts[0::2]).strip()
+        phrases = parts[1::2]
+        return words, phrases
 
     def do_search(self):
 
         matched_ids = []
 
-        req = '{{ "_source": false, "query": {{ "match": {{ "content": "{}"}}}}}}'.format(self.search_textbox.text())
-        res = self.elastic_search_client.search(index="library", body=req)
+        words, phrases = self._parse_search_query()
+
+        if not words and not phrases:
+            return
+
+        req = {
+            '_source': False,
+            'query': {
+                'bool': {
+                    'must': []
+                }
+            }
+        }
+
+        matches = req['query']['bool']['must']
+
+        if words:
+            matches.append({'match': {'content': words}})
+        for phrase in phrases:
+            matches.append({'match_phrase': {'content': phrase}})
+
+        res = self.elastic_search_client.search(index="library", body=json.dumps(req))
 
         hits_number = res['hits']['total']['value']
         page_size = len(res['hits']['hits'])
 
         for i in range(hits_number):
             if not res['hits']['hits']:
-                req_paged = '{{ "_source": false, "query": {{ "match": {{ "content": "{}"}}}}, "from": {}, "size": {}}}'.format(
-                    self.search_textbox.text(),
-                    i,
-                    page_size)
-                res = self.elastic_search_client.search(index="library", body=req_paged)
+                req['from'] = i
+                req['size'] = page_size
+                res = self.elastic_search_client.search(index="library", body=json.dumps(req))
 
             curr = res['hits']['hits'].pop(0)
             matched_ids.append(int(curr['_id'].split(':')[0]))
@@ -309,6 +366,8 @@ class SearchDialog(Qt.QDialog):
         self.cancel_button.setVisible(False)
         self.cancel_button.setText('&Cancel')
         self.progress_bar.setVisible(False)
+        self.details_button.setVisible(False)
+        self.details.setVisible(False)
 
     def _set_searching_mode(self):
         self.search_textbox.setEnabled(False)
@@ -318,6 +377,14 @@ class SearchDialog(Qt.QDialog):
         self.close_button.setEnabled(False)
         self.cancel_button.setVisible(True)
         self.progress_bar.setVisible(True)
+        self.details_button.setVisible(True)
+        icon = get_icons('images/right-arrow.png')
+        self.details_button.setIcon(icon)
+
+    def on_details(self):
+        self.details.setVisible(not self.details.isVisible())
+        icon = get_icons('images/down-arrow.png' if self.details.isVisible() else 'images/right-arrow.png')
+        self.details_button.setIcon(icon)
 
     def on_cancel(self):
         self.canceled.set()
@@ -336,4 +403,13 @@ class SearchDialog(Qt.QDialog):
         Qt.QMessageBox.about(self, TITLE, '<html><body><pre>{}</pre></body></html>'.format(text.decode('utf-8')))
 
     def on_config(self):
-        self.plugin.do_user_config(parent=self)
+        ok_pressed = self.plugin.do_user_config(parent=self)
+        if ok_pressed:
+            pdftotext_full_path = self._get_pdftotext_full_path()
+            if not pdftotext_full_path:
+                from calibre.gui2 import error_dialog
+                error_dialog(
+                    self,
+                    TITLE,
+                    'Could not find pdftotext tool. Please make sure that the path "{}" is correct.'.format(prefs['pdftotext_path']),
+                    show=True)

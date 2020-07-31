@@ -8,7 +8,7 @@ prefs = JSONConfig('plugins/caps')
 
 prefs.defaults['elasticsearch_url'] = 'localhost:9200'
 prefs.defaults['pdftotext_path'] = 'pdftotext'
-prefs.defaults['concurrency'] = multiprocessing.cpu_count()
+prefs.defaults['concurrency'] = multiprocessing.cpu_count()-1 or 1
 
 
 class ConfigWidget(QWidget):
