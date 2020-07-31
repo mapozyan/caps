@@ -1,3 +1,7 @@
+## 1.2.0 2020-07-31 Usability improvements
+- Phrase search when using quotes (example query: "Mark Twain" poetry)
+- Details section in dialog box listing book conversion status
+
 ## 1.1.1 2020-07-27 Windows bugfix
 - Suppress console window from popping up when running conversion subprocess
 
