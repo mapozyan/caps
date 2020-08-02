@@ -6,6 +6,7 @@ import platform
 import subprocess
 import threading
 import time
+from timeit import default_timer as timer
 
 from calibre_plugins.caps.config import prefs
 from elasticsearch import Elasticsearch, NotFoundError
@@ -13,7 +14,7 @@ from PyQt5 import Qt
 from PyQt5.QtCore import Qt as QtCore, pyqtSlot, pyqtSignal, QObject
 
 TITLE = 'Power Search'
-SUPPORTED_FORMATS = ['CHM', 'CBZ', 'FB2', 'PDB', 'DJVU', 'EPUB', 'MOBI', 'DOC', 'DOCX', 'PDF', 'TXT', 'RTF', 'DJV', 'AZW3', 'KFX']
+SUPPORTED_FORMATS = ['CHM', 'CBZ', 'CBR', 'FB2', 'PDB', 'DJVU', 'EPUB', 'MOBI', 'DOC', 'DOCX', 'PDF', 'TXT', 'RTF', 'DJV', 'AZW3', 'AZW4', 'KFX']
 
 FNULL = open(os.devnull, 'w')
 
@@ -163,6 +164,14 @@ class SearchDialog(Qt.QDialog):
 
     def on_search(self):
 
+        # Start conversion time dictionaries
+        self.timer_start = {}
+        self.timer_end = {}
+        self.conversion_time_dict = {}
+
+        # Set timer for the whole indexing
+        self.timer_total_start = timer()
+
         self._set_searching_mode()
 
         self.canceled = threading.Event()
@@ -208,7 +217,6 @@ class SearchDialog(Qt.QDialog):
 
         self.delete_list = [k for k in self.index_state.keys() if k not in all_formats]
 
-
         if len(self.update_list) + len(self.delete_list) > 0:
             self.thread_pool.setMaxThreadCount(prefs['concurrency'])
             self.add_workers_submitted = len(self.update_list)
@@ -234,6 +242,8 @@ class SearchDialog(Qt.QDialog):
         item = Qt.QListWidgetItem('Converting {}'.format(args['input']))
         item.setData(QtCore.UserRole, id)
         self.details.addItem(item)
+        # Sets the initial timer for conversion
+        self.timer_start.update({id: timer()})
 
     def add_worker_complete(self, args):
         id = concat(args['book_id'], args['format'])
@@ -242,6 +252,13 @@ class SearchDialog(Qt.QDialog):
             curr_id = item.data(QtCore.UserRole)
             if curr_id == id:
                 self.details.takeItem(i)
+                # Get the conversion time for this book
+                self.timer_end.update({id: timer()})
+                self.conversion_time_seconds = self.timer_end[id] - self.timer_start[id]
+                self.conversion_time = datetime.timedelta(seconds=self.conversion_time_seconds)
+                print('Book {} converted in {}.'.format(id, self.conversion_time))
+                # Add it to a dictionary with all the converted books
+                self.conversion_time_dict.update({id: self.conversion_time_seconds})
                 break
         if not self.canceled.is_set():
             self.progress_bar.setValue(self.progress_bar.value() + 1)
@@ -281,6 +298,7 @@ class SearchDialog(Qt.QDialog):
             creationflags = SUBPROCESS_CREATION_FLAGS[platform.system()]
             if args['format'] == 'PDF' and args['pdftotext']:
                 subprocess.call([args['pdftotext'], '-enc', 'UTF-8', args['input'], args['output']], stdout=FNULL, stderr=FNULL, creationflags=creationflags)
+                print('Book {} converted with pdfttotext.'.format(id))
             else:
                 subprocess.call(['ebook-convert', args['input'], args['output']], stdout=FNULL, stderr=FNULL, creationflags=creationflags)
             # print('Book {} converted to plaintext'.format(id))
@@ -300,43 +318,26 @@ class SearchDialog(Qt.QDialog):
 
     def delete_book(self, id):
         try:
-            self.elastic_search_client.delete(index="library", id=id, ignore=[404])
-            # print('Deleted {}'.format(id))
-            del self.index_state[id]
+            self.elastic_search_client.delete(index="library", id=id['book_id'], ignore=[404])
+            # print('Deleted {}'.format(id['book_id']))
+            del self.index_state[id['book_id']]
 
         except Exception as ex:
             print(ex)
-
-    def _parse_search_query(self):
-        parts = [part.strip() for part in self.search_textbox.text().split('"')]
-        words = ' '.join(parts[0::2]).strip()
-        phrases = parts[1::2]
-        return words, phrases
 
     def do_search(self):
 
         matched_ids = []
 
-        words, phrases = self._parse_search_query()
-
-        if not words and not phrases:
-            return
-
         req = {
             '_source': False,
             'query': {
-                'bool': {
-                    'must': []
+                'query_string': {
+                    'query': self.search_textbox.text(),
+                    'default_operator': 'AND'
                 }
             }
         }
-
-        matches = req['query']['bool']['must']
-
-        if words:
-            matches.append({'match': {'content': words}})
-        for phrase in phrases:
-            matches.append({'match_phrase': {'content': phrase}})
 
         res = self.elastic_search_client.search(index="library", body=json.dumps(req))
 
@@ -355,6 +356,17 @@ class SearchDialog(Qt.QDialog):
         self.full_db.set_marked_ids(matched_ids)
         self.gui.search.setEditText('marked:true')
         self.gui.search.do_search()
+
+        # If new books are found, it shows which file took the longest and also the total time of conversion/indexing
+        if self.conversion_time_dict:
+            self.max_conversion_time_seconds = self.conversion_time_dict[
+                max(self.conversion_time_dict, key=self.conversion_time_dict.get)]
+            self.max_conversion_time = datetime.timedelta(seconds=self.max_conversion_time_seconds)
+            print('Book {} took the longest time to convert: {}'.format(
+                max(self.conversion_time_dict, key=self.conversion_time_dict.get), self.max_conversion_time))
+            self.timer_total_end = timer()
+            self.timer_total = datetime.timedelta(seconds=(self.timer_total_end - self.timer_total_start))
+            print('Total time for conversion/indexing: {}'.format(self.timer_total))
 
     def _set_idle_mode(self):
         self.search_textbox.setEnabled(True)
@@ -392,7 +404,7 @@ class SearchDialog(Qt.QDialog):
         self.cancel_button.setEnabled(False)
 
     def on_search_text_changed(self, text):
-        self.search_button.setEnabled(text <> '')
+        self.search_button.setEnabled(text != '')
 
     def reject(self):
         if self.close_button.isEnabled():
