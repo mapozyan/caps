@@ -1,0 +1,22 @@
+Power Search allows you running complex queries.
+
+When you enter a query with multiple words, Power Serach will try to find all of the books that
+contain all of your query words. However, it won't be a phrase search, i.e. your query words might
+appear in different parts of the text.
+If you wish to search for a particular phrase, put it in double quotes.
+    Example: "independence day"
+
+If you need to exclude documents containing specific word, prepend it with a minus sign.
+    Example: good -bad
+
+To find books containing any of given words, use OR operator in uppercase.
+    Example: good OR bad
+
+You can write complex expression by combining AND and OR operators in conjunction with round brackets.
+    Example: (good OR bad) AND pizza
+
+Power Search supports wildcard search with * (any number of characters) and ? (one character) symbols.
+    Example: math*
+
+It's possible to write even more complex queries by using regular expressions put in forward slashes:
+    Example: /14[1-2][0-9]/ renaissance

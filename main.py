@@ -10,7 +10,7 @@ from timeit import default_timer as timer
 
 from calibre_plugins.caps.config import prefs
 from elasticsearch import Elasticsearch, NotFoundError
-from PyQt5 import Qt
+from PyQt5 import Qt, QtWidgets
 from PyQt5.QtCore import Qt as QtCore, pyqtSlot, pyqtSignal, QObject
 
 TITLE = 'Power Search'
@@ -87,14 +87,26 @@ class SearchDialog(Qt.QDialog):
         self.search_label = Qt.QLabel('Enter text to search in content')
         self.layout.addWidget(self.search_label)
 
+        self.search_text_layout = Qt.QHBoxLayout()
+
         self.search_textbox = Qt.QLineEdit(self)
         self.search_textbox.setMinimumWidth(400)
         self.search_textbox.textChanged.connect(self.on_search_text_changed)
-        self.layout.addWidget(self.search_textbox)
         self.search_label.setBuddy(self.search_textbox)
+        self.search_text_layout.addWidget(self.search_textbox)
+
+        self.search_help_button = Qt.QPushButton('?', self)
+        fixed_size_policy = self.search_help_button.sizePolicy()
+        fixed_size_policy.setHorizontalPolicy(QtWidgets.QSizePolicy.Fixed)
+        self.search_help_button.setSizePolicy(fixed_size_policy)
+        self.search_help_button.clicked.connect(self.on_search_help)
+        self.search_text_layout.addWidget(self.search_help_button)
+
+        self.layout.addLayout(self.search_text_layout)
 
         self.search_button = Qt.QPushButton('&Search', self)
         self.search_button.setEnabled(False)
+        self.search_button.setDefault(True)
         self.search_button.clicked.connect(self.on_search)
         self.layout.addWidget(self.search_button)
 
@@ -332,7 +344,7 @@ class SearchDialog(Qt.QDialog):
         req = {
             '_source': False,
             'query': {
-                'query_string': {
+                'simple_query_string': {
                     'query': self.search_textbox.text(),
                     'default_operator': 'AND'
                 }
@@ -370,6 +382,7 @@ class SearchDialog(Qt.QDialog):
 
     def _set_idle_mode(self):
         self.search_textbox.setEnabled(True)
+        self.search_help_button.setEnabled(True)
         self.conf_button.setEnabled(True)
         self.search_button.setVisible(True)
         self.readme_button.setEnabled(True)
@@ -380,9 +393,11 @@ class SearchDialog(Qt.QDialog):
         self.progress_bar.setVisible(False)
         self.details_button.setVisible(False)
         self.details.setVisible(False)
+        self.search_textbox.setFocus(QtCore.OtherFocusReason)
 
     def _set_searching_mode(self):
         self.search_textbox.setEnabled(False)
+        self.search_help_button.setEnabled(False)
         self.search_button.setVisible(False)
         self.readme_button.setEnabled(False)
         self.conf_button.setEnabled(False)
@@ -425,3 +440,7 @@ class SearchDialog(Qt.QDialog):
                     TITLE,
                     'Could not find pdftotext tool. Please make sure that the path "{}" is correct.'.format(prefs['pdftotext_path']),
                     show=True)
+
+    def on_search_help(self):
+        text = get_resources('USAGE.txt')
+        Qt.QMessageBox.about(self, TITLE, '<html><body><pre>{}</pre></body></html>'.format(text.decode('utf-8')))
