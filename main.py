@@ -14,7 +14,6 @@ from PyQt5 import Qt, QtWidgets
 from PyQt5.QtCore import Qt as QtCore, pyqtSlot, pyqtSignal, QObject
 
 TITLE = 'Power Search'
-SUPPORTED_FORMATS = ['CHM', 'CBZ', 'CBR', 'FB2', 'PDB', 'DJVU', 'EPUB', 'MOBI', 'DOC', 'DOCX', 'PDF', 'TXT', 'RTF', 'DJV', 'AZW3', 'AZW4', 'KFX']
 
 FNULL = open(os.devnull, 'w')
 
@@ -66,6 +65,21 @@ class AsyncWorker(Qt.QRunnable):
         self.signals.started.emit(*self.args, **self.kwargs)
         self.fn(*self.args, **self.kwargs)
         self.signals.finished.emit(*self.args, **self.kwargs)
+
+class ScrollMessageBox(Qt.QMessageBox):
+   def __init__(self, items, *args, **kwargs):
+      Qt.QMessageBox.__init__(self, *args, **kwargs)
+      self.setWindowTitle(TITLE)
+      self.setStandardButtons(Qt.QMessageBox.Ok)
+      scroll = Qt.QScrollArea(self)
+      scroll.setWidgetResizable(True)
+      self.content = Qt.QWidget()
+      scroll.setWidget(self.content)
+      lay = Qt.QVBoxLayout(self.content)
+      for item in items:
+         lay.addWidget(Qt.QLabel(item, self))
+      self.layout().addWidget(scroll, 0, 0, 1, self.layout().columnCount())
+      self.setStyleSheet("QScrollArea{min-width:800px; min-height: 500px}")
 
 class SearchDialog(Qt.QDialog):
 
@@ -210,9 +224,10 @@ class SearchDialog(Qt.QDialog):
 
         pdftotext_full_path = self._get_pdftotext_full_path()
 
+        file_formats = prefs['file_formats'].split(',')
         for book_id in self.db.all_book_ids():
             for format in self.db.formats(book_id):
-                if format in SUPPORTED_FORMATS:
+                if format in file_formats:
                     last_modified = self.db.format_metadata(book_id, format)['mtime']
                     key = concat(book_id, format)
                     all_formats.add(key)
@@ -427,7 +442,9 @@ class SearchDialog(Qt.QDialog):
 
     def on_readme(self):
         text = get_resources('README.txt')
-        Qt.QMessageBox.about(self, TITLE, '<html><body><pre>{}</pre></body></html>'.format(text.decode('utf-8')))
+        text = '<html><body><pre>{}</pre></body></html>'.format(text.decode('utf-8'))
+        msgbox = ScrollMessageBox([text])
+        msgbox.exec_()
 
     def on_config(self):
         ok_pressed = self.plugin.do_user_config(parent=self)

@@ -1,3 +1,6 @@
+## 1.4.0 2020-08-24 Usability improvements
+- Allow to select file formats for indexing
+
 ## 1.3.0 2020-08-08 Support for complex queries
 - Switch from ElasticSerach "match" query to "simple_query_string"
 - Fix broken index update on book deletion

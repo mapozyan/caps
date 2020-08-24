@@ -1,14 +1,18 @@
 import multiprocessing
 from string import ascii_lowercase
 
-from PyQt5.Qt import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit
+from PyQt5 import QtWidgets
+from PyQt5.Qt import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QListWidget
 from calibre.utils.config import JSONConfig
+
+SUPPORTED_FORMATS = ['AZW3', 'AZW4', 'CBR', 'CBZ', 'CHM', 'DJV', 'DJVU', 'DOC', 'DOCX', 'EPUB', 'FB2', 'KFX', 'MOBI', 'PDB', 'PDF', 'RTF', 'TXT']
 
 prefs = JSONConfig('plugins/caps')
 
 prefs.defaults['elasticsearch_url'] = 'localhost:9200'
 prefs.defaults['pdftotext_path'] = 'pdftotext'
 prefs.defaults['concurrency'] = multiprocessing.cpu_count()-1 or 1
+prefs.defaults['file_formats'] = ','.join(SUPPORTED_FORMATS)
 
 
 class ConfigWidget(QWidget):
@@ -42,6 +46,19 @@ class ConfigWidget(QWidget):
         self.l.addWidget(self.msg3)
         self.label3.setBuddy(self.msg3)
 
+        self.label4 = QLabel('Index book formats:')
+        self.l.addWidget(self.label4)
+
+        self.formats_list = QListWidget(self)
+        self.formats_list.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
+        self.formats_list.addItems(SUPPORTED_FORMATS)
+        file_formats = prefs['file_formats'].split(',')
+        for i in range(len(SUPPORTED_FORMATS)):
+            if self.formats_list.item(i).text() in file_formats:
+                self.formats_list.item(i).setSelected(True)
+        self.l.addWidget(self.formats_list)
+        self.label4.setBuddy(self.formats_list)
+
     def save_settings(self):
         prefs['elasticsearch_url'] = self.msg1.text()
         prefs['pdftotext_path'] = self.msg2.text()
@@ -49,3 +66,8 @@ class ConfigWidget(QWidget):
             prefs['concurrency'] = int(self.msg3.text())
         except Exception:
             pass
+        file_formats = []
+        for i in range(len(SUPPORTED_FORMATS)):
+            if self.formats_list.item(i).isSelected():
+                file_formats.append(self.formats_list.item(i).text())
+        prefs['file_formats'] = ','.join(file_formats)
