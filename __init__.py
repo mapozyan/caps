@@ -1,12 +1,12 @@
 from calibre.customize import InterfaceActionBase
 
-class CapsPluginDemo(InterfaceActionBase):
+class CapsPlugin(InterfaceActionBase):
 
     name                = 'Calibre Power Search Plugin'
     description         = 'Enables Full-text Search'
-    supported_platforms = ['linux', 'windows'] # TODO: add support for 'osx'
+    supported_platforms = ['linux', 'windows', 'osx']
     author              = 'Michael Apozyan'
-    version             = (1, 4, 0)
+    version             = (1, 5, 0)
     minimum_calibre_version = (0, 7, 53)
 
     actual_plugin       = 'calibre_plugins.caps.ui:CapsPlugin'
@@ -23,5 +23,3 @@ class CapsPluginDemo(InterfaceActionBase):
         ac = self.actual_plugin_
         if ac is not None:
             ac.apply_settings()
-
-

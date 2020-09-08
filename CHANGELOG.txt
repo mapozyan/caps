@@ -1,3 +1,7 @@
+## 1.5.0 2020-09-08 Feature update
+- Add macOS support
+- Add Reindex buttons
+
 ## 1.4.0 2020-08-24 Usability improvements
 - Allow to select file formats for indexing
 

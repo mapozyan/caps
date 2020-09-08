@@ -1,5 +1,6 @@
 import datetime
 import dateutil.tz
+import functools
 import json
 import os
 import platform
@@ -19,6 +20,7 @@ FNULL = open(os.devnull, 'w')
 
 SUBPROCESS_CREATION_FLAGS = {
     'Linux':   0,
+    'Darwin':  0,
     'Windows': 0x00000008 # DETACHED_PROCESS
 }
 
@@ -35,7 +37,7 @@ def which(program):
         if is_exe(program):
             return program
     else:
-        for path in os.environ["PATH"].split(os.pathsep):
+        for path in os.environ['PATH'].split(os.pathsep):
             exe_file = os.path.join(path, program)
             if is_exe(exe_file):
                 return exe_file
@@ -79,7 +81,7 @@ class ScrollMessageBox(Qt.QMessageBox):
       for item in items:
          lay.addWidget(Qt.QLabel(item, self))
       self.layout().addWidget(scroll, 0, 0, 1, self.layout().columnCount())
-      self.setStyleSheet("QScrollArea{min-width:800px; min-height: 500px}")
+      self.setStyleSheet('QScrollArea{min-width:800px; min-height: 500px}')
 
 class SearchDialog(Qt.QDialog):
 
@@ -154,6 +156,14 @@ class SearchDialog(Qt.QDialog):
 
         self.layout.addStretch()
 
+        self.reindex_button = Qt.QPushButton('&Reindex new books', self)
+        self.reindex_button.clicked.connect(self.on_reindex)
+        self.layout.addWidget(self.reindex_button)
+
+        self.reindex_all_button = Qt.QPushButton('&Reindex all books', self)
+        self.reindex_all_button.clicked.connect(self.on_reindex_all)
+        self.layout.addWidget(self.reindex_all_button)
+
         self.conf_button = Qt.QPushButton('&Options...', self)
         self.conf_button.clicked.connect(self.on_config)
         self.layout.addWidget(self.conf_button)
@@ -174,8 +184,6 @@ class SearchDialog(Qt.QDialog):
         self.delete_workers_submitted = 0
         self.delete_workers_complete = 0
 
-        self.index_state = {}
-
     def _get_pdftotext_full_path(self):
         pdftotext_full_path = None
 
@@ -189,7 +197,9 @@ class SearchDialog(Qt.QDialog):
         return pdftotext_full_path
 
     def on_search(self):
+        self._reindex(self.do_search)
 
+    def _reindex(self, completion_proc=None):
         # Start conversion time dictionaries
         self.timer_start = {}
         self.timer_end = {}
@@ -239,7 +249,8 @@ class SearchDialog(Qt.QDialog):
                             'input': self.db.format_abspath(book_id, format),
                             'output': self.plugin.temporary_file(suffix='.txt').name,
                             'last_modified': last_modified,
-                            'pdftotext': pdftotext_full_path
+                            'pdftotext': pdftotext_full_path,
+                            'completion_proc': completion_proc
                         })
 
         self.delete_list = [k for k in self.index_state.keys() if k not in all_formats]
@@ -257,12 +268,14 @@ class SearchDialog(Qt.QDialog):
                 worker.signals.finished.connect(self.add_worker_complete)
                 self.thread_pool.start(worker)
             for curr in self.delete_list:
-                worker = AsyncWorker(self.delete_book, {'book_id': curr})
+                curr = {'book_id': curr, 'completion_proc': completion_proc}
+                worker = AsyncWorker(self.delete_book, curr)
                 worker.signals.finished.connect(self.delete_worker_complete)
                 self.thread_pool.start(worker)
         else:
             self._set_idle_mode()
-            self.do_search()
+            if completion_proc:
+                completion_proc()
 
     def add_worker_started(self, args):
         id = concat(args['book_id'], args['format'])
@@ -290,16 +303,16 @@ class SearchDialog(Qt.QDialog):
         if not self.canceled.is_set():
             self.progress_bar.setValue(self.progress_bar.value() + 1)
         self.add_workers_complete += 1
-        self._check_work_complete()
+        self._check_work_complete(args['completion_proc'])
 
     def delete_worker_complete(self, args):
         if not self.canceled.is_set():
             if self.delete_workers_complete % 20 == 0:
                 self.progress_bar.setValue(self.progress_bar.value() + 1)
         self.delete_workers_complete += 1
-        self._check_work_complete()
+        self._check_work_complete(args['completion_proc'])
 
-    def _check_work_complete(self):
+    def _check_work_complete(self, completion_proc):
         if self.add_workers_complete != self.add_workers_submitted or self.delete_workers_complete != self.delete_workers_submitted:
             return
 
@@ -307,13 +320,15 @@ class SearchDialog(Qt.QDialog):
             self.progress_bar.setValue(0)
         else:
             self.progress_bar.setValue(self.progress_bar.maximum())
-            prefs[self.db.library_id] = {'index_state': self.index_state}
+
+        prefs[self.db.library_id] = {'index_state': self.index_state}
 
         self.workers_submitted = 0
         self.workers_complete = 0
 
         self._set_idle_mode()
-        self.do_search()
+        if completion_proc:
+            completion_proc()
 
     def add_book(self, args):
 
@@ -321,13 +336,15 @@ class SearchDialog(Qt.QDialog):
             if self.canceled.is_set():
                 return
             id = concat(args['book_id'], args['format'])
+            os = platform.system()
             # print('Book {} start processing'.format(id))
-            creationflags = SUBPROCESS_CREATION_FLAGS[platform.system()]
+            creationflags = SUBPROCESS_CREATION_FLAGS[os]
             if args['format'] == 'PDF' and args['pdftotext']:
                 subprocess.call([args['pdftotext'], '-enc', 'UTF-8', args['input'], args['output']], stdout=FNULL, stderr=FNULL, creationflags=creationflags)
                 print('Book {} converted with pdfttotext.'.format(id))
             else:
-                subprocess.call(['ebook-convert', args['input'], args['output']], stdout=FNULL, stderr=FNULL, creationflags=creationflags)
+                ebook_convert_path = '/Applications/calibre.app/Contents/MacOS/ebook-convert' if os == 'Darwin' else 'ebook-convert'
+                subprocess.call([ebook_convert_path, args['input'], args['output']], stdout=FNULL, stderr=FNULL, creationflags=creationflags)
             # print('Book {} converted to plaintext'.format(id))
 
             content = open(args['output']).readlines()
@@ -335,7 +352,7 @@ class SearchDialog(Qt.QDialog):
                 'metadata': args['metadata'],
                 'content': content
             }
-            res = self.elastic_search_client.index(index="library", id=id, body=doc)
+            res = self.elastic_search_client.index(index='library', id=id, body=doc)
             # print('Book {} "{}" in index'.format(id, res['result']))
 
             self.index_state[id] = args['last_modified']
@@ -345,7 +362,7 @@ class SearchDialog(Qt.QDialog):
 
     def delete_book(self, id):
         try:
-            self.elastic_search_client.delete(index="library", id=id['book_id'], ignore=[404])
+            self.elastic_search_client.delete(index='library', id=id['book_id'], ignore=[404])
             # print('Deleted {}'.format(id['book_id']))
             del self.index_state[id['book_id']]
 
@@ -366,7 +383,7 @@ class SearchDialog(Qt.QDialog):
             }
         }
 
-        res = self.elastic_search_client.search(index="library", body=json.dumps(req))
+        res = self.elastic_search_client.search(index='library', body=json.dumps(req))
 
         hits_number = res['hits']['total']['value']
         page_size = len(res['hits']['hits'])
@@ -375,7 +392,7 @@ class SearchDialog(Qt.QDialog):
             if not res['hits']['hits']:
                 req['from'] = i
                 req['size'] = page_size
-                res = self.elastic_search_client.search(index="library", body=json.dumps(req))
+                res = self.elastic_search_client.search(index='library', body=json.dumps(req))
 
             curr = res['hits']['hits'].pop(0)
             matched_ids.append(int(curr['_id'].split(':')[0]))
@@ -398,6 +415,8 @@ class SearchDialog(Qt.QDialog):
     def _set_idle_mode(self):
         self.search_textbox.setEnabled(True)
         self.search_help_button.setEnabled(True)
+        self.reindex_button.setEnabled(True)
+        self.reindex_all_button.setEnabled(True)
         self.conf_button.setEnabled(True)
         self.search_button.setVisible(True)
         self.readme_button.setEnabled(True)
@@ -413,6 +432,8 @@ class SearchDialog(Qt.QDialog):
     def _set_searching_mode(self):
         self.search_textbox.setEnabled(False)
         self.search_help_button.setEnabled(False)
+        self.reindex_button.setEnabled(False)
+        self.reindex_all_button.setEnabled(False)
         self.search_button.setVisible(False)
         self.readme_button.setEnabled(False)
         self.conf_button.setEnabled(False)
@@ -445,6 +466,31 @@ class SearchDialog(Qt.QDialog):
         text = '<html><body><pre>{}</pre></body></html>'.format(text.decode('utf-8'))
         msgbox = ScrollMessageBox([text])
         msgbox.exec_()
+
+    def on_reindex(self):
+        self._reindex()
+
+    def on_reindex_all(self):
+        from calibre.gui2 import question_dialog
+
+        if question_dialog(self, TITLE, 'You are about to rebuild all fulltext search index. This process might take a while. Are you sure?', default_yes=False):
+
+            self.elastic_search_client = Elasticsearch([prefs['elasticsearch_url']], timeout=20.0)
+
+            if not self.elastic_search_client.ping():
+                from calibre.gui2 import error_dialog
+                error_dialog(
+                    self,
+                    TITLE,
+                    'Could not connect to ElasticSearch cluster. Please make sure that it\'s running.',
+                    show=True)
+                return
+
+            self.elastic_search_client.indices.delete(index='library', ignore=[400, 404])
+
+            prefs[self.db.library_id] = {'index_state': {}}
+
+            self._reindex()
 
     def on_config(self):
         ok_pressed = self.plugin.do_user_config(parent=self)
