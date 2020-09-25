@@ -1,6 +1,6 @@
 import argparse
 
-from certifi import contents, where
+from .core import contents, where
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-c", "--contents", action="store_true")

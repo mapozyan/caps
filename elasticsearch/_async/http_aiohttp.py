@@ -18,7 +18,7 @@
 import asyncio
 import ssl
 import os
-import urllib3
+import calibre_plugins.caps.urllib3 as urllib3
 import warnings
 
 import aiohttp
@@ -45,7 +45,7 @@ SSL_SHOW_WARN_DEFAULT = object()
 CA_CERTS = None
 
 try:
-    import certifi
+    import calibre_plugins.caps.certifi as certifi
 
     CA_CERTS = certifi.where()
 except ImportError:

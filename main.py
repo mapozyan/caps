@@ -10,7 +10,7 @@ import time
 from timeit import default_timer as timer
 
 from calibre_plugins.caps.config import prefs
-from elasticsearch import Elasticsearch, NotFoundError
+from calibre_plugins.caps.elasticsearch import Elasticsearch
 from PyQt5 import Qt, QtWidgets
 from PyQt5.QtCore import Qt as QtCore, pyqtSlot, pyqtSignal, QObject
 

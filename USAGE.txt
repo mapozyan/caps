@@ -9,11 +9,11 @@ If you wish to search for a particular phrase, put it in double quotes.
 If you need to exclude documents containing specific word, prepend it with a minus sign.
     Example: good -bad
 
-To find books containing any of given words, use OR operator in uppercase.
-    Example: good OR bad
+To find books containing any of given words, use | operator (which means OR).
+    Example: good | bad
 
-You can write complex expression by combining AND and OR operators in conjunction with round brackets.
-    Example: (good OR bad) AND pizza
+You can write complex expression by using round brackets.
+    Example: (good | bad) pizza
 
 Power Search supports wildcard search with * (any number of characters) and ? (one character) symbols.
     Example: math*

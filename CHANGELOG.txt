@@ -1,3 +1,6 @@
+## 1.6.0 2020-09-25 Compatibility fix
+- Add support for Calibre 5
+
 ## 1.5.0 2020-09-08 Feature update
 - Add macOS support
 - Add Reindex buttons
