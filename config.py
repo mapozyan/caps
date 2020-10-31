@@ -2,7 +2,7 @@ import multiprocessing
 from string import ascii_lowercase
 
 from PyQt5 import QtWidgets
-from PyQt5.Qt import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QListWidget
+from PyQt5.Qt import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, Qt
 from calibre.utils.config import JSONConfig
 
 SUPPORTED_FORMATS = ['AZW3', 'AZW4', 'CBR', 'CBZ', 'CHM', 'DJV', 'DJVU', 'DOC', 'DOCX', 'EPUB', 'FB2', 'KFX', 'MOBI', 'PDB', 'PDF', 'RTF', 'TXT']
@@ -49,13 +49,17 @@ class ConfigWidget(QWidget):
         self.label4 = QLabel('Index book formats:')
         self.l.addWidget(self.label4)
 
-        self.formats_list = QListWidget(self)
-        self.formats_list.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
-        self.formats_list.addItems(SUPPORTED_FORMATS)
         file_formats = prefs['file_formats'].split(',')
-        for i in range(len(SUPPORTED_FORMATS)):
-            if self.formats_list.item(i).text() in file_formats:
-                self.formats_list.item(i).setSelected(True)
+
+        self.formats_list = QListWidget(self)
+        for fmt in SUPPORTED_FORMATS:
+            item = QListWidgetItem(fmt)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            if fmt in file_formats:
+                item.setCheckState(Qt.Checked)
+            else:
+                item.setCheckState(Qt.Unchecked)
+            self.formats_list.addItem(item)
         self.l.addWidget(self.formats_list)
         self.label4.setBuddy(self.formats_list)
 
@@ -68,6 +72,6 @@ class ConfigWidget(QWidget):
             pass
         file_formats = []
         for i in range(len(SUPPORTED_FORMATS)):
-            if self.formats_list.item(i).isSelected():
+            if self.formats_list.item(i).checkState() == Qt.Checked:
                 file_formats.append(self.formats_list.item(i).text())
         prefs['file_formats'] = ','.join(file_formats)
