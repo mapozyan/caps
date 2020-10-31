@@ -5,6 +5,7 @@ import json
 import os
 import platform
 import subprocess
+import sys
 import threading
 import time
 from timeit import default_timer as timer
@@ -347,7 +348,10 @@ class SearchDialog(Qt.QDialog):
                 subprocess.call([ebook_convert_path, args['input'], args['output']], stdout=FNULL, stderr=FNULL, creationflags=creationflags)
             # print('Book {} converted to plaintext'.format(id))
 
-            content = open(args['output']).readlines()
+            if sys.version_info[0] >= 3:
+                content = open(args['output'], errors='ignore').readlines()
+            else:
+                content = open(args['output']).readlines()
             doc = {
                 'metadata': args['metadata'],
                 'content': content
