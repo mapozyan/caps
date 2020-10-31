@@ -157,13 +157,17 @@ class SearchDialog(Qt.QDialog):
 
         self.layout.addStretch()
 
+        self.reindex_layout = Qt.QHBoxLayout()
+
         self.reindex_button = Qt.QPushButton('&Reindex new books', self)
         self.reindex_button.clicked.connect(self.on_reindex)
-        self.layout.addWidget(self.reindex_button)
+        self.reindex_layout.addWidget(self.reindex_button)
 
         self.reindex_all_button = Qt.QPushButton('&Reindex all books', self)
         self.reindex_all_button.clicked.connect(self.on_reindex_all)
-        self.layout.addWidget(self.reindex_all_button)
+        self.reindex_layout.addWidget(self.reindex_all_button)
+
+        self.layout.addLayout(self.reindex_layout)
 
         self.conf_button = Qt.QPushButton('&Options...', self)
         self.conf_button.clicked.connect(self.on_config)
