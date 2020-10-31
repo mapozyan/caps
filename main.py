@@ -132,6 +132,10 @@ class SearchDialog(Qt.QDialog):
         self.cancel_button.setVisible(False)
         self.layout.addWidget(self.cancel_button)
 
+        self.status_label = Qt.QLabel()
+        self.status_label.setAlignment(QtCore.AlignCenter)
+        self.layout.addWidget(self.status_label)
+
         self.progress_bar = Qt.QProgressBar(self)
         self.progress_bar.setVisible(False)
         retain_size_policy = self.progress_bar.sizePolicy()
@@ -202,6 +206,7 @@ class SearchDialog(Qt.QDialog):
         return pdftotext_full_path
 
     def on_search(self):
+        self.status_label.setText('')
         self._reindex(self.do_search)
 
     def _reindex(self, completion_proc=None):
@@ -322,6 +327,7 @@ class SearchDialog(Qt.QDialog):
             return
 
         if self.canceled.is_set():
+            self.status_label.setText('Cancelled')
             self.progress_bar.setValue(0)
         else:
             self.progress_bar.setValue(self.progress_bar.maximum())
@@ -405,6 +411,7 @@ class SearchDialog(Qt.QDialog):
             curr = res['hits']['hits'].pop(0)
             matched_ids.append(int(curr['_id'].split(':')[0]))
 
+        self.status_label.setText('Found {} books'.format(hits_number))
         self.full_db.set_marked_ids(matched_ids)
         self.gui.search.setEditText('marked:true')
         self.gui.search.do_search()
@@ -458,6 +465,7 @@ class SearchDialog(Qt.QDialog):
         self.details_button.setIcon(icon)
 
     def on_cancel(self):
+        self.status_label.setText('')
         self.canceled.set()
         self.cancel_button.setText('Cancelling...')
         self.cancel_button.setEnabled(False)
