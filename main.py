@@ -193,6 +193,8 @@ class SearchDialog(Qt.QDialog):
         self.delete_workers_submitted = 0
         self.delete_workers_complete = 0
 
+        self.first_paint = True
+
     def _get_pdftotext_full_path(self):
         pdftotext_full_path = None
 
@@ -475,6 +477,8 @@ class SearchDialog(Qt.QDialog):
 
     def reject(self):
         if self.close_button.isEnabled():
+            self.status_label.setText('')
+            prefs['geometry'] = self.saveGeometry()
             Qt.QDialog.reject(self)
 
     def on_readme(self):
@@ -523,3 +527,10 @@ class SearchDialog(Qt.QDialog):
     def on_search_help(self):
         text = get_resources('USAGE.txt')
         Qt.QMessageBox.about(self, TITLE, '<html><body><pre>{}</pre></body></html>'.format(text.decode('utf-8')))
+
+    def paintEvent(self, event):
+        if self.first_paint:
+            if 'geometry' in prefs:
+                self.restoreGeometry(prefs['geometry'])
+            self.first_paint = False
+        return Qt.QDialog.paintEvent(self, event)

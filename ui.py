@@ -11,6 +11,8 @@ class CapsPlugin(InterfaceAction):
     action_spec = ('Power Search', None,
             'Run the Power Search', 'Ctrl+Shift+S')
 
+    dlg = None
+
     def genesis(self):
         icon = get_icons('images/icon.png')
         self.qaction.setIcon(icon)
@@ -19,8 +21,11 @@ class CapsPlugin(InterfaceAction):
     def show_dialog(self):
         base_plugin_object = self.interface_action_base_plugin
         do_user_config = base_plugin_object.do_user_config
-        dlg = SearchDialog(base_plugin_object, self.gui, self.qaction.icon())
-        dlg.show()
+        if not self.dlg:
+            self.dlg = SearchDialog(base_plugin_object, self.gui, self.qaction.icon())
+        self.dlg.show()
+        self.dlg.raise_()
+        self.dlg.activateWindow()
 
     def apply_settings(self):
         from calibre_plugins.caps.config import prefs
