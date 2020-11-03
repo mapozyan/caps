@@ -71,20 +71,34 @@ class AsyncWorker(Qt.QRunnable):
         self.fn(*self.args, **self.kwargs)
         self.signals.finished.emit(*self.args, **self.kwargs)
 
-class ScrollMessageBox(Qt.QMessageBox):
-   def __init__(self, items, *args, **kwargs):
-      Qt.QMessageBox.__init__(self, *args, **kwargs)
-      self.setWindowTitle(TITLE)
-      self.setStandardButtons(Qt.QMessageBox.Ok)
-      scroll = Qt.QScrollArea(self)
-      scroll.setWidgetResizable(True)
-      self.content = Qt.QWidget()
-      scroll.setWidget(self.content)
-      lay = Qt.QVBoxLayout(self.content)
-      for item in items:
-         lay.addWidget(Qt.QLabel(item, self))
-      self.layout().addWidget(scroll, 0, 0, 1, self.layout().columnCount())
-      self.setStyleSheet('QScrollArea{min-width:800px; min-height: 500px}')
+class ScrollMessageBox(Qt.QDialog):
+    def __init__(self, items, width, height, *args, **kwargs):
+        Qt.QDialog.__init__(self, *args, **kwargs)
+        self.setWindowTitle(TITLE)
+        self.layout = Qt.QVBoxLayout()
+        self.setLayout(self.layout)
+
+        icon = get_icons('images/icon.png')
+        self.icon = Qt.QLabel(self)
+        self.icon.setPixmap(icon.pixmap(85, 80))
+        self.layout.addWidget(self.icon)
+
+        scroll = Qt.QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        self.content = Qt.QWidget()
+        scroll.setWidget(self.content)
+        lay = Qt.QVBoxLayout(self.content)
+        for item in items:
+            lay.addWidget(Qt.QLabel(item, self))
+        self.layout.addWidget(scroll)
+        self.ok_button = Qt.QPushButton('&OK', self)
+        self.ok_button.setIcon(get_icons('images/ok.png'))
+        self.ok_button.clicked.connect(self.close)
+        self.ok_layout = Qt.QHBoxLayout()
+        self.ok_layout.addStretch()
+        self.ok_layout.addWidget(self.ok_button)
+        self.layout.addLayout(self.ok_layout)
+        self.setStyleSheet('QScrollArea{{min-width: {}px; min-height: {}px}}'.format(width, height))
 
 class SearchDialog(Qt.QDialog):
 
@@ -504,7 +518,7 @@ class SearchDialog(Qt.QDialog):
     def on_readme(self):
         text = get_resources('README.txt')
         text = '<html><body><pre>{}</pre></body></html>'.format(text.decode('utf-8'))
-        msgbox = ScrollMessageBox([text])
+        msgbox = ScrollMessageBox([text], 850, 500)
         msgbox.exec_()
 
     def on_reindex(self):
@@ -546,7 +560,10 @@ class SearchDialog(Qt.QDialog):
 
     def on_search_help(self):
         text = get_resources('USAGE.txt')
-        Qt.QMessageBox.about(self, TITLE, '<html><body><pre>{}</pre></body></html>'.format(text.decode('utf-8')))
+        text = '<html><body><pre>{}</pre></body></html>'.format(text.decode('utf-8'))
+
+        msgbox = ScrollMessageBox([text], 850, 350)
+        msgbox.exec_()
 
     def paintEvent(self, event):
         if self.first_paint:

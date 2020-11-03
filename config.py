@@ -116,7 +116,7 @@ class ConfigWidget(QWidget):
         if question_dialog(
             self,
             TITLE,
-            'You are about to clear all fulltext search index. Rebuilding it again might take a while. Are you sure?',
+            'You are about to clear all fulltext search index. Rebuilding it might take a while. Are you sure?',
             default_yes=False):
 
             elastic_search_client = Elasticsearch([prefs['elasticsearch_url']], timeout=20.0)
