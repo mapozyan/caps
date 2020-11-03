@@ -2,7 +2,7 @@ import multiprocessing
 from string import ascii_lowercase
 
 from PyQt5 import QtWidgets
-from PyQt5.Qt import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, Qt
+from PyQt5.Qt import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QCheckBox, Qt
 from calibre.utils.config import JSONConfig
 from calibre_plugins.caps.elasticsearch import Elasticsearch
 
@@ -16,6 +16,7 @@ prefs.defaults['elasticsearch_url'] = 'localhost:9200'
 prefs.defaults['pdftotext_path'] = 'pdftotext'
 prefs.defaults['concurrency'] = multiprocessing.cpu_count()-1 or 1
 prefs.defaults['file_formats'] = ','.join(SUPPORTED_FORMATS)
+prefs.defaults['autoindex'] = True
 
 
 class ConfigWidget(QWidget):
@@ -38,6 +39,8 @@ class ConfigWidget(QWidget):
         self.layout.addWidget(self.elasticsearch_url_textbox)
         self.engine_location_label.setBuddy(self.elasticsearch_url_textbox)
 
+        self.layout.addSpacing(10)
+
         self.pdftotext_path_label = QLabel('Path to pdftotext tool:')
         self.layout.addWidget(self.pdftotext_path_label)
 
@@ -46,6 +49,8 @@ class ConfigWidget(QWidget):
         self.layout.addWidget(self.pdftotext_path_textbox)
         self.pdftotext_path_label.setBuddy(self.pdftotext_path_textbox)
 
+        self.layout.addSpacing(10)
+
         self.concurrency_label = QLabel('Number of parallel processes for text extraction:')
         self.layout.addWidget(self.concurrency_label)
 
@@ -53,6 +58,8 @@ class ConfigWidget(QWidget):
         self.concurrency_textbox.setText(str(prefs['concurrency']))
         self.layout.addWidget(self.concurrency_textbox)
         self.concurrency_label.setBuddy(self.concurrency_textbox)
+
+        self.layout.addSpacing(10)
 
         self.formats_label = QLabel('Index book formats:')
         self.layout.addWidget(self.formats_label)
@@ -63,13 +70,18 @@ class ConfigWidget(QWidget):
         for fmt in SUPPORTED_FORMATS:
             item = QListWidgetItem(fmt)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            if fmt in file_formats:
-                item.setCheckState(Qt.Checked)
-            else:
-                item.setCheckState(Qt.Unchecked)
+            item.setCheckState(Qt.Checked if fmt in file_formats else Qt.Unchecked)
             self.formats_list.addItem(item)
         self.layout.addWidget(self.formats_list)
         self.formats_label.setBuddy(self.formats_list)
+
+        self.layout.addSpacing(10)
+
+        self.autoindex_checkbox = QCheckBox("Automatically index new books on search", self)
+        self.autoindex_checkbox.setCheckState(Qt.Checked if prefs['autoindex'] else Qt.Unchecked)
+        self.layout.addWidget(self.autoindex_checkbox)
+
+        self.layout.addSpacing(10)
 
         self.privacy_label = QLabel('Privacy:')
         self.layout.addWidget(self.privacy_label)
@@ -94,6 +106,7 @@ class ConfigWidget(QWidget):
             if self.formats_list.item(i).checkState() == Qt.Checked:
                 file_formats.append(self.formats_list.item(i).text())
         prefs['file_formats'] = ','.join(file_formats)
+        prefs['autoindex'] = True if self.autoindex_checkbox.checkState() == Qt.Checked else False
 
     def on_clear_history(self):
         from calibre.gui2 import info_dialog

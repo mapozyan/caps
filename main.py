@@ -231,7 +231,10 @@ class SearchDialog(Qt.QDialog):
     def on_search(self):
         self.status_label.setText('')
         self._manage_lru()
-        self._reindex(self.do_search)
+        if prefs['autoindex']:
+            self._reindex(self.do_search)
+        else:
+            self.do_search()
 
     def _manage_lru(self):
         current_text = self.search_textbox.currentText()
