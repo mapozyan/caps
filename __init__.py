@@ -16,7 +16,7 @@ class CapsPlugin(InterfaceActionBase):
 
     def config_widget(self):
         from calibre_plugins.caps.config import ConfigWidget
-        return ConfigWidget()
+        return ConfigWidget(self.actual_plugin_)
 
     def save_settings(self, config_widget):
         config_widget.save_settings()

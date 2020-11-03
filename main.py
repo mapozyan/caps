@@ -17,6 +17,8 @@ from PyQt5.QtCore import Qt as QtCore, pyqtSlot, pyqtSignal, QObject
 
 TITLE = 'Power Search'
 
+SEARCH_HISTORY_ITEMS = 10
+
 FNULL = open(os.devnull, 'w')
 
 SUBPROCESS_CREATION_FLAGS = {
@@ -106,9 +108,14 @@ class SearchDialog(Qt.QDialog):
 
         self.search_text_layout = Qt.QHBoxLayout()
 
-        self.search_textbox = Qt.QLineEdit(self)
+        self.search_textbox = Qt.QComboBox(self)
         self.search_textbox.setMinimumWidth(400)
-        self.search_textbox.textChanged.connect(self.on_search_text_changed)
+        self.search_textbox.setEditable(True)
+        self.search_textbox.setInsertPolicy(Qt.QComboBox.NoInsert)
+        for _, value in sorted(prefs.get('search_lru', {}).items()):
+            self.search_textbox.addItem(value)
+        self.search_textbox.setEditText('')
+        self.search_textbox.editTextChanged.connect(self.on_search_text_changed)
         self.search_label.setBuddy(self.search_textbox)
         self.search_text_layout.addWidget(self.search_textbox)
 
@@ -209,7 +216,20 @@ class SearchDialog(Qt.QDialog):
 
     def on_search(self):
         self.status_label.setText('')
+        self._manage_lru()
         self._reindex(self.do_search)
+
+    def _manage_lru(self):
+        current_text = self.search_textbox.currentText()
+        for i in range(self.search_textbox.count()):
+            if self.search_textbox.itemText(i) == current_text:
+                self.search_textbox.removeItem(i)
+                break
+        if self.search_textbox.count() >= SEARCH_HISTORY_ITEMS:
+            self.search_textbox.removeItem(self.search_textbox.count() - 1)
+        self.search_textbox.setEditText(current_text)
+        self.search_textbox.insertItem(0, current_text)
+        prefs['search_lru'] = {i: self.search_textbox.itemText(i) for i in range(self.search_textbox.count())}
 
     def _reindex(self, completion_proc=None):
         # Start conversion time dictionaries
@@ -393,7 +413,7 @@ class SearchDialog(Qt.QDialog):
             '_source': False,
             'query': {
                 'simple_query_string': {
-                    'query': self.search_textbox.text(),
+                    'query': self.search_textbox.currentText(),
                     'default_operator': 'AND'
                 }
             }
@@ -534,3 +554,6 @@ class SearchDialog(Qt.QDialog):
                 self.restoreGeometry(prefs['geometry'])
             self.first_paint = False
         return Qt.QDialog.paintEvent(self, event)
+
+    def clear_lru(self):
+        self.search_textbox.clear()
