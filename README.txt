@@ -1,7 +1,7 @@
 Calibre Power Search Plugin
 ===========================
 
-Version 1.6.0, released on 25 Sep 2020. Created by Michael Apozyan
+Version 1.7.0, released on 4 Nov 2020. Created by Michael Apozyan
 
 Overview
 --------
@@ -47,6 +47,10 @@ Configuring
 
 * Index book formats
     You can enable/disable specific book file formats that should be indexed.
+
+* Automatically index new books on search
+    You can enable/disable an option of discovering new books and indexing them each time you run
+    the search.
 
 Feedback
 --------
