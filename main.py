@@ -10,6 +10,7 @@ import threading
 import time
 from timeit import default_timer as timer
 
+from calibre.utils.config_base import json_dumps
 from calibre_plugins.caps.config import prefs
 from calibre_plugins.caps.elasticsearch import Elasticsearch
 from PyQt5 import Qt, QtWidgets
@@ -246,7 +247,15 @@ class SearchDialog(Qt.QDialog):
             self.search_textbox.removeItem(self.search_textbox.count() - 1)
         self.search_textbox.setEditText(current_text)
         self.search_textbox.insertItem(0, current_text)
-        prefs['search_lru'] = {i: self.search_textbox.itemText(i) for i in range(self.search_textbox.count())}
+        search_lru = {}
+        for i in range(self.search_textbox.count()):
+            try:
+                text = self.search_textbox.itemText(i)
+                json_dumps(text)
+                search_lru[i] = text
+            except TypeError as ex:
+                pass
+        prefs['search_lru'] = search_lru
 
     def _reindex(self, completion_proc=None):
         # Start conversion time dictionaries
