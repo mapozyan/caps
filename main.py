@@ -10,8 +10,11 @@ import threading
 import time
 from timeit import default_timer as timer
 
+import calibre
+import calibre.ptempfile
 from calibre.utils.config_base import json_dumps
-from calibre_plugins.caps.config import prefs
+from calibre_plugins.caps import CapsPlugin
+from calibre_plugins.caps.config import prefs, ARCHIVE_FORMATS
 from calibre_plugins.caps.elasticsearch import Elasticsearch
 from PyQt5 import Qt, QtWidgets
 from PyQt5.QtCore import Qt as QtCore, pyqtSlot, pyqtSignal, QObject
@@ -217,17 +220,24 @@ class SearchDialog(Qt.QDialog):
 
         self.first_paint = True
 
+        self.pdftotext_full_path = None
+
+        if 'version' not in prefs:
+            file_formats = set(prefs['file_formats'].split(',') + ARCHIVE_FORMATS)
+            prefs['file_formats'] = ','.join(file_formats)
+            prefs['version'] = CapsPlugin.version
+
     def _get_pdftotext_full_path(self):
-        pdftotext_full_path = None
 
-        pdftotext = prefs['pdftotext_path']
+        if self.pdftotext_full_path is None:
+            pdftotext = prefs['pdftotext_path']
 
-        if is_exe(pdftotext):
-            pdftotext_full_path = pdftotext
-        elif os.path.sep not in pdftotext:
-            pdftotext_full_path = which(pdftotext)
+            if is_exe(pdftotext):
+                self.pdftotext_full_path = pdftotext
+            elif os.path.sep not in pdftotext:
+                self.pdftotext_full_path = which(pdftotext)
 
-        return pdftotext_full_path
+        return self.pdftotext_full_path
 
     def on_search(self):
         self.status_label.setText('')
@@ -282,7 +292,7 @@ class SearchDialog(Qt.QDialog):
             self._set_idle_mode()
             return
 
-        self.index_state = prefs.get(self.db.library_id, {}).get('index_state', {})
+        index_state = prefs.get(self.db.library_id, {}).get('index_state', {})
 
         all_formats = set()
         self.update_list = []
@@ -290,28 +300,25 @@ class SearchDialog(Qt.QDialog):
 
         epoch = datetime.datetime(1, 1, 1, 0, 0, tzinfo=dateutil.tz.tzutc())
 
-        pdftotext_full_path = self._get_pdftotext_full_path()
-
         file_formats = prefs['file_formats'].split(',')
         for book_id in self.db.all_book_ids():
-            for format in self.db.formats(book_id):
-                if format in file_formats:
-                    last_modified = self.db.format_metadata(book_id, format)['mtime']
-                    key = concat(book_id, format)
-                    all_formats.add(key)
-                    if self.index_state.get(key, epoch) < last_modified:
-                        self.update_list.append({
-                            'book_id': book_id,
-                            'format': format,
-                            'metadata': str(self.db.get_metadata(book_id)),
-                            'input': self.db.format_abspath(book_id, format),
-                            'output': self.plugin.temporary_file(suffix='.txt').name,
-                            'last_modified': last_modified,
-                            'pdftotext': pdftotext_full_path,
-                            'completion_proc': completion_proc
-                        })
+            if 'noindex' not in self.db.get_metadata(book_id).tags:
+                for format in self.db.formats(book_id):
+                    if format in file_formats:
+                        last_modified = self.db.format_metadata(book_id, format)['mtime']
+                        key = concat(book_id, format)
+                        all_formats.add(key)
+                        if index_state.get(key, epoch) < last_modified:
+                            self.update_list.append({
+                                'book_id': book_id,
+                                'format': format,
+                                'metadata': str(self.db.get_metadata(book_id)),
+                                'input': self.db.format_abspath(book_id, format),
+                                'last_modified': last_modified,
+                                'completion_proc': completion_proc
+                            })
 
-        self.delete_list = [k for k in self.index_state.keys() if k not in all_formats]
+        self.delete_list = [k for k in index_state.keys() if k not in all_formats]
 
         if len(self.update_list) + len(self.delete_list) > 0:
             self.thread_pool.setMaxThreadCount(prefs['concurrency'])
@@ -354,7 +361,7 @@ class SearchDialog(Qt.QDialog):
                 self.timer_end.update({id: timer()})
                 self.conversion_time_seconds = self.timer_end[id] - self.timer_start[id]
                 self.conversion_time = datetime.timedelta(seconds=self.conversion_time_seconds)
-                print('Book {} converted in {}.'.format(id, self.conversion_time))
+                # print('Book {} converted in {}.'.format(id, self.conversion_time))
                 # Add it to a dictionary with all the converted books
                 self.conversion_time_dict.update({id: self.conversion_time_seconds})
                 break
@@ -380,8 +387,6 @@ class SearchDialog(Qt.QDialog):
         else:
             self.progress_bar.setValue(self.progress_bar.maximum())
 
-        prefs[self.db.library_id] = {'index_state': self.index_state}
-
         self.workers_submitted = 0
         self.workers_complete = 0
 
@@ -389,44 +394,80 @@ class SearchDialog(Qt.QDialog):
         if completion_proc:
             completion_proc()
 
+    def convert_book(self, input, format):
+        if format in ARCHIVE_FORMATS:
+            content = []
+            try:
+                file_formats = prefs['file_formats'].split(',')
+                directory = calibre.ptempfile.PersistentTemporaryDirectory()
+                calibre.extract(input, directory)
+                for curr_dir, _, files in os.walk(directory):
+                    for f in files:
+                        for fmt in file_formats:
+                            if f.upper().endswith('.' + fmt):
+                                content += self.convert_book(os.path.join(curr_dir, f), fmt)
+            except Exception as ex:
+                print(ex)
+
+            return content
+
+        os_name = platform.system()
+        output = self.plugin.temporary_file(suffix='.txt').name
+        creationflags = SUBPROCESS_CREATION_FLAGS[os_name]
+        done = False
+        if format == 'PDF':
+            pdftotext_full_path = self._get_pdftotext_full_path()
+            if pdftotext_full_path:
+                subprocess.call([pdftotext_full_path, '-enc', 'UTF-8', input, output], stdout=FNULL, stderr=FNULL, creationflags=creationflags)
+                # print('Book {} converted with pdfttotext.'.format(id))
+                done = True
+        if not done:
+            ebook_convert_path = '/Applications/calibre.app/Contents/MacOS/ebook-convert' if os == 'Darwin' else 'ebook-convert'
+            subprocess.call([ebook_convert_path, input, output], stdout=FNULL, stderr=FNULL, creationflags=creationflags)
+        # print('Book {} converted to plaintext'.format(id))
+
+        if sys.version_info[0] >= 3:
+            content = open(output, errors='ignore').readlines()
+        else:
+            content = open(output).readlines()
+        return content
+
     def add_book(self, args):
 
         try:
             if self.canceled.is_set():
                 return
             id = concat(args['book_id'], args['format'])
-            os = platform.system()
-            # print('Book {} start processing'.format(id))
-            creationflags = SUBPROCESS_CREATION_FLAGS[os]
-            if args['format'] == 'PDF' and args['pdftotext']:
-                subprocess.call([args['pdftotext'], '-enc', 'UTF-8', args['input'], args['output']], stdout=FNULL, stderr=FNULL, creationflags=creationflags)
-                print('Book {} converted with pdfttotext.'.format(id))
-            else:
-                ebook_convert_path = '/Applications/calibre.app/Contents/MacOS/ebook-convert' if os == 'Darwin' else 'ebook-convert'
-                subprocess.call([ebook_convert_path, args['input'], args['output']], stdout=FNULL, stderr=FNULL, creationflags=creationflags)
-            # print('Book {} converted to plaintext'.format(id))
+            print('Book {} start processing: {}'.format(id, args['input']))
+            content = self.convert_book(args['input'], args['format'])
 
-            if sys.version_info[0] >= 3:
-                content = open(args['output'], errors='ignore').readlines()
-            else:
-                content = open(args['output']).readlines()
             doc = {
                 'metadata': args['metadata'],
                 'content': content
             }
             res = self.elastic_search_client.index(index='library', id=id, body=doc)
-            # print('Book {} "{}" in index'.format(id, res['result']))
+            print('Book {} "{}" in index'.format(id, res['result']))
 
-            self.index_state[id] = args['last_modified']
+            # print('Book {} "{}" in index'.format(id, args['input']))
+
+            if 'index_state' not in prefs[self.db.library_id]:
+                prefs[self.db.library_id]['index_state'] = {}
+            prefs[self.db.library_id]['index_state'][id] = args['last_modified']
+            prefs.commit()
+
+
 
         except Exception as ex:
             print(ex)
 
-    def delete_book(self, id):
+    def delete_book(self, args):
         try:
-            self.elastic_search_client.delete(index='library', id=id['book_id'], ignore=[404])
+            self.elastic_search_client.delete(index='library', id=args['book_id'], ignore=[404])
             # print('Deleted {}'.format(id['book_id']))
-            del self.index_state[id['book_id']]
+
+            if 'index_state' in prefs[self.db.library_id]:
+                del prefs[self.db.library_id]['index_state'][args['book_id']]
+                prefs.commit()
 
         except Exception as ex:
             print(ex)
@@ -534,6 +575,7 @@ class SearchDialog(Qt.QDialog):
         msgbox.exec_()
 
     def on_reindex(self):
+        self.status_label.setText('')
         self._reindex()
 
     def on_reindex_all(self):
@@ -552,15 +594,19 @@ class SearchDialog(Qt.QDialog):
                     show=True)
                 return
 
+            self.status_label.setText('')
+
             self.elastic_search_client.indices.delete(index='library', ignore=[400, 404])
 
             prefs[self.db.library_id] = {'index_state': {}}
+            prefs.commit()
 
             self._reindex()
 
     def on_config(self):
         ok_pressed = self.plugin.do_user_config(parent=self)
         if ok_pressed:
+            self.pdftotext_full_path = None
             pdftotext_full_path = self._get_pdftotext_full_path()
             if not pdftotext_full_path:
                 from calibre.gui2 import error_dialog

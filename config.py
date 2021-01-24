@@ -8,7 +8,9 @@ from calibre_plugins.caps.elasticsearch import Elasticsearch
 
 TITLE = 'Power Search'
 
-SUPPORTED_FORMATS = ['AZW3', 'AZW4', 'CBR', 'CBZ', 'CHM', 'DJV', 'DJVU', 'DOC', 'DOCX', 'EPUB', 'FB2', 'KFX', 'MOBI', 'PDB', 'PDF', 'RTF', 'TXT']
+ARCHIVE_FORMATS = ['7Z', 'ZIP', 'RAR']
+
+SUPPORTED_FORMATS = sorted(['AZW3', 'AZW4', 'CBR', 'CBZ', 'CHM', 'DJV', 'DJVU', 'DOC', 'DOCX', 'EPUB', 'FB2', 'KFX', 'MOBI', 'PDB', 'PDF', 'RTF', 'TXT'] + ARCHIVE_FORMATS)
 
 prefs = JSONConfig('plugins/caps')
 
