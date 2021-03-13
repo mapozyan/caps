@@ -4,7 +4,7 @@ from string import ascii_lowercase
 from PyQt5 import QtWidgets
 from PyQt5.Qt import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QCheckBox, Qt
 from calibre.utils.config import JSONConfig
-from calibre_plugins.caps.elasticsearch import Elasticsearch
+from calibre_plugins.caps.elasticsearch_helper import get_elasticsearch_client
 
 TITLE = 'Power Search'
 
@@ -15,6 +15,7 @@ SUPPORTED_FORMATS = sorted(['AZW3', 'AZW4', 'CBR', 'CBZ', 'CHM', 'DJV', 'DJVU', 
 prefs = JSONConfig('plugins/caps')
 
 prefs.defaults['elasticsearch_url'] = 'localhost:9200'
+prefs.defaults['elasticsearch_launch_path'] = None
 prefs.defaults['pdftotext_path'] = 'pdftotext'
 prefs.defaults['concurrency'] = multiprocessing.cpu_count()-1 or 1
 prefs.defaults['file_formats'] = ','.join(SUPPORTED_FORMATS)
@@ -40,6 +41,16 @@ class ConfigWidget(QWidget):
         self.elasticsearch_url_textbox.setText(prefs['elasticsearch_url'])
         self.layout.addWidget(self.elasticsearch_url_textbox)
         self.engine_location_label.setBuddy(self.elasticsearch_url_textbox)
+
+        self.layout.addSpacing(10)
+
+        self.engine_launch_path_label = QLabel('ElasticSearch launch path:')
+        self.layout.addWidget(self.engine_launch_path_label)
+
+        self.elasticsearch_launch_path_textbox = QLineEdit(self)
+        self.elasticsearch_launch_path_textbox.setText(prefs['elasticsearch_launch_path'])
+        self.layout.addWidget(self.elasticsearch_launch_path_textbox)
+        self.engine_launch_path_label.setBuddy(self.elasticsearch_launch_path_textbox)
 
         self.layout.addSpacing(10)
 
@@ -98,6 +109,7 @@ class ConfigWidget(QWidget):
 
     def save_settings(self):
         prefs['elasticsearch_url'] = self.elasticsearch_url_textbox.text()
+        prefs['elasticsearch_launch_path'] = self.elasticsearch_launch_path_textbox.text()
         prefs['pdftotext_path'] = self.pdftotext_path_textbox.text()
         try:
             prefs['concurrency'] = int(self.concurrency_textbox.text())
@@ -134,7 +146,7 @@ class ConfigWidget(QWidget):
             'You are about to clear all fulltext search index. Rebuilding it might take a while. Are you sure?',
             default_yes=False):
 
-            elastic_search_client = Elasticsearch([prefs['elasticsearch_url']], timeout=20.0)
+            elastic_search_client = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
 
             if not elastic_search_client.ping():
 

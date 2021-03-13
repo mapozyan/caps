@@ -4,7 +4,6 @@ import functools
 import json
 import os
 import platform
-import subprocess
 import sys
 import threading
 import time
@@ -14,22 +13,16 @@ import calibre
 import calibre.ptempfile
 from calibre.utils.config_base import json_dumps
 from calibre_plugins.caps import CapsPlugin
+from calibre_plugins.caps.async_worker import AsyncWorker
 from calibre_plugins.caps.config import prefs, ARCHIVE_FORMATS
-from calibre_plugins.caps.elasticsearch import Elasticsearch
+from calibre_plugins.caps.elasticsearch_helper import get_elasticsearch_client
+from calibre_plugins.caps.subprocess_helper import subprocess_call
 from PyQt5 import Qt, QtWidgets
-from PyQt5.QtCore import Qt as QtCore, pyqtSlot, pyqtSignal, QObject
+from PyQt5.QtCore import Qt as QtCore
 
 TITLE = 'Power Search'
 
 SEARCH_HISTORY_ITEMS = 10
-
-FNULL = open(os.devnull, 'w')
-
-SUBPROCESS_CREATION_FLAGS = {
-    'Linux':   0,
-    'Darwin':  0,
-    'Windows': 0x00000008 # DETACHED_PROCESS
-}
 
 if False:
     get_resources = lambda x: x
@@ -53,27 +46,6 @@ def which(program):
 
 def concat(book_id, format):
     return '{}:{}'.format(book_id, format)
-
-class WorkerSignals(QObject):
-    started = pyqtSignal(dict)
-    finished = pyqtSignal(dict)
-    error = pyqtSignal(tuple)
-    result = pyqtSignal(object)
-
-class AsyncWorker(Qt.QRunnable):
-
-    def __init__(self, fn, *args, **kwargs):
-        super(AsyncWorker, self).__init__()
-        self.fn = fn
-        self.args = args
-        self.kwargs = kwargs
-        self.signals = WorkerSignals()
-
-    @pyqtSlot()
-    def run(self):
-        self.signals.started.emit(*self.args, **self.kwargs)
-        self.fn(*self.args, **self.kwargs)
-        self.signals.finished.emit(*self.args, **self.kwargs)
 
 class ScrollMessageBox(Qt.QDialog):
     def __init__(self, items, width, height, *args, **kwargs):
@@ -280,7 +252,7 @@ class SearchDialog(Qt.QDialog):
 
         self.canceled = threading.Event()
 
-        self.elastic_search_client = Elasticsearch([prefs['elasticsearch_url']], timeout=20.0)
+        self.elastic_search_client = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
 
         if not self.elastic_search_client.ping():
             from calibre.gui2 import error_dialog
@@ -411,19 +383,18 @@ class SearchDialog(Qt.QDialog):
 
             return content
 
-        os_name = platform.system()
         output = self.plugin.temporary_file(suffix='.txt').name
-        creationflags = SUBPROCESS_CREATION_FLAGS[os_name]
         done = False
         if format == 'PDF':
             pdftotext_full_path = self._get_pdftotext_full_path()
             if pdftotext_full_path:
-                subprocess.call([pdftotext_full_path, '-enc', 'UTF-8', input, output], stdout=FNULL, stderr=FNULL, creationflags=creationflags)
+                subprocess_call([pdftotext_full_path, '-enc', 'UTF-8', input, output])
                 # print('Book {} converted with pdfttotext.'.format(id))
                 done = True
         if not done:
-            ebook_convert_path = '/Applications/calibre.app/Contents/MacOS/ebook-convert' if os == 'Darwin' else 'ebook-convert'
-            subprocess.call([ebook_convert_path, input, output], stdout=FNULL, stderr=FNULL, creationflags=creationflags)
+            os_name = platform.system()
+            ebook_convert_path = '/Applications/calibre.app/Contents/MacOS/ebook-convert' if os_name == 'Darwin' else 'ebook-convert'
+            subprocess_call([ebook_convert_path, input, output])
         # print('Book {} converted to plaintext'.format(id))
 
         if sys.version_info[0] >= 3:
@@ -583,7 +554,7 @@ class SearchDialog(Qt.QDialog):
 
         if question_dialog(self, TITLE, 'You are about to rebuild all fulltext search index. This process might take a while. Are you sure?', default_yes=False):
 
-            self.elastic_search_client = Elasticsearch([prefs['elasticsearch_url']], timeout=20.0)
+            self.elastic_search_client = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
 
             if not self.elastic_search_client.ping():
                 from calibre.gui2 import error_dialog
