@@ -96,7 +96,7 @@ class SearchDialog(Qt.QDialog):
         self.layout = Qt.QVBoxLayout()
         self.setLayout(self.layout)
 
-        self.search_label = Qt.QLabel('Enter text to search in content')
+        self.search_label = Qt.QLabel('Enter &text to search in content')
         self.layout.addWidget(self.search_label)
 
         self.search_text_layout = Qt.QHBoxLayout()
@@ -178,11 +178,11 @@ class SearchDialog(Qt.QDialog):
 
         self.reindex_layout = Qt.QHBoxLayout()
 
-        self.reindex_button = Qt.QPushButton('&Reindex new books', self)
+        self.reindex_button = Qt.QPushButton('Reindex &new books', self)
         self.reindex_button.clicked.connect(self.on_reindex)
         self.reindex_layout.addWidget(self.reindex_button)
 
-        self.reindex_all_button = Qt.QPushButton('&Reindex all books', self)
+        self.reindex_all_button = Qt.QPushButton('Reindex &all books', self)
         self.reindex_all_button.clicked.connect(self.on_reindex_all)
         self.reindex_layout.addWidget(self.reindex_all_button)
 
