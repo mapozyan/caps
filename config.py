@@ -44,7 +44,7 @@ class ConfigWidget(QWidget):
 
         self.layout.addSpacing(10)
 
-        self.engine_launch_path_label = QLabel('ElasticSearch launch path:')
+        self.engine_launch_path_label = QLabel('Path to ElasticSearch:')
         self.layout.addWidget(self.engine_launch_path_label)
 
         self.elasticsearch_launch_path_textbox = QLineEdit(self)

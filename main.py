@@ -121,11 +121,26 @@ class SearchDialog(Qt.QDialog):
 
         self.layout.addLayout(self.search_text_layout)
 
+        self.search_button_layout = Qt.QHBoxLayout()
+        self.search_button_layout.setSpacing(0)
+
         self.search_button = Qt.QPushButton('&Search', self)
         self.search_button.setEnabled(False)
         self.search_button.setDefault(True)
-        self.search_button.clicked.connect(self.on_search)
-        self.layout.addWidget(self.search_button)
+        self.search_button.clicked.connect(self.on_search_all)
+        self.search_button_layout.addWidget(self.search_button)
+
+        self.custom_search_button = Qt.QPushButton('', self)
+        self.custom_search_button.setMaximumWidth(self.custom_search_button.iconSize().width())
+        self.custom_search_button.setEnabled(False)
+        self.search_button_layout.addWidget(self.custom_search_button)
+
+        self.custom_search_button_dropdown = QtWidgets.QMenu(self)
+        self.custom_search_button_dropdown.addAction('Search in the whole library', self.on_search_all)
+        self.custom_search_button_dropdown.addAction('Search in selected books', self.on_search_selected)
+        self.custom_search_button.setMenu(self.custom_search_button_dropdown)
+
+        self.layout.addLayout(self.search_button_layout)
 
         self.cancel_button = Qt.QPushButton('&Cancel', self)
         self.cancel_button.clicked.connect(self.on_cancel)
@@ -197,6 +212,8 @@ class SearchDialog(Qt.QDialog):
 
         self.pdftotext_full_path = None
 
+        self.ids = None
+
         if 'version' not in prefs:
             file_formats = set(prefs['file_formats'].split(',') + ARCHIVE_FORMATS)
             prefs['file_formats'] = ','.join(file_formats)
@@ -213,6 +230,15 @@ class SearchDialog(Qt.QDialog):
                 self.pdftotext_full_path = which(pdftotext)
 
         return self.pdftotext_full_path
+
+    def on_search_all(self):
+        self.ids = None
+        self.on_search()
+
+    def on_search_selected(self):
+        rows = self.gui.library_view.selectionModel().selectedRows()
+        self.ids = list(map(self.gui.library_view.model().id, rows))
+        self.on_search()
 
     def on_search(self):
         self.status_label.setText('')
@@ -458,8 +484,6 @@ class SearchDialog(Qt.QDialog):
 
     def do_search(self):
 
-        matched_ids = []
-
         req = {
             '_source': False,
             'query': {
@@ -488,6 +512,8 @@ class SearchDialog(Qt.QDialog):
         hits_number = res['hits']['total']['value']
         page_size = len(res['hits']['hits'])
 
+        matched_ids = set()
+
         for i in range(hits_number):
             if not res['hits']['hits']:
                 req['from'] = i
@@ -495,9 +521,11 @@ class SearchDialog(Qt.QDialog):
                 res = self.elastic_search_client.search(index='library', body=json.dumps(req))
 
             curr = res['hits']['hits'].pop(0)
-            matched_ids.append(int(curr['_id'].split(':')[0]))
+            id = int(curr['_id'].split(':')[0])
+            if self.ids is None or id in self.ids:
+                matched_ids.add(id)
 
-        self.status_label.setText('Found {} books'.format(hits_number))
+        self.status_label.setText('Found {} books'.format(len(matched_ids)))
         self.full_db.set_marked_ids(matched_ids)
         self.gui.search.setEditText('marked:true')
         self.gui.search.do_search()
@@ -520,6 +548,7 @@ class SearchDialog(Qt.QDialog):
         self.reindex_all_button.setEnabled(True)
         self.conf_button.setEnabled(True)
         self.search_button.setVisible(True)
+        self.custom_search_button.setVisible(True)
         self.readme_button.setEnabled(True)
         self.close_button.setEnabled(True)
         self.cancel_button.setEnabled(True)
@@ -536,6 +565,7 @@ class SearchDialog(Qt.QDialog):
         self.reindex_button.setEnabled(False)
         self.reindex_all_button.setEnabled(False)
         self.search_button.setVisible(False)
+        self.custom_search_button.setVisible(False)
         self.readme_button.setEnabled(False)
         self.conf_button.setEnabled(False)
         self.close_button.setEnabled(False)
@@ -558,6 +588,7 @@ class SearchDialog(Qt.QDialog):
 
     def on_search_text_changed(self, text):
         self.search_button.setEnabled(text != '')
+        self.custom_search_button.setEnabled(text != '')
 
     def reject(self):
         if self.close_button.isEnabled():
