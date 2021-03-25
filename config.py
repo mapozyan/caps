@@ -146,7 +146,16 @@ class ConfigWidget(QWidget):
             'You are about to clear all fulltext search index. Rebuilding it might take a while. Are you sure?',
             default_yes=False):
 
-            elastic_search_client = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
+            elastic_search_client, reason = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
+
+            if not elastic_search_client:
+
+                error_dialog(
+                    self,
+                    TITLE,
+                    reason,
+                    show=True)
+                return
 
             if not elastic_search_client.ping():
 

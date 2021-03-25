@@ -5,7 +5,7 @@ import subprocess
 SUBPROCESS_CREATION_FLAGS = {
     'Linux':   0,
     'Darwin':  0,
-    'Windows': 0x00000008 # DETACHED_PROCESS # subprocess.CREATE_NEW_CONSOLE
+    'Windows': 0x00000008 # DETACHED_PROCESS
 }
 
 FNULL = open(os.devnull, 'w')

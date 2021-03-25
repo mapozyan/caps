@@ -86,6 +86,9 @@ class SearchDialog(Qt.QDialog):
         self.full_db = gui.current_db
         self.db = gui.current_db.new_api
 
+        self.elastic_search_client = None
+        self.conversion_time_dict = {}
+
         self.setWindowTitle(TITLE)
         self.setWindowIcon(icon)
         self.setWindowFlags(QtCore.Window | QtCore.WindowTitleHint | QtCore.CustomizeWindowHint)
@@ -252,7 +255,17 @@ class SearchDialog(Qt.QDialog):
 
         self.canceled = threading.Event()
 
-        self.elastic_search_client = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
+        self.elastic_search_client, reason = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
+
+        if not self.elastic_search_client:
+            from calibre.gui2 import error_dialog
+            error_dialog(
+                self,
+                TITLE,
+                reason,
+                show=True)
+            self._set_idle_mode()
+            return
 
         if not self.elastic_search_client.ping():
             from calibre.gui2 import error_dialog
@@ -457,6 +470,19 @@ class SearchDialog(Qt.QDialog):
             }
         }
 
+        if not self.elastic_search_client:
+            self.elastic_search_client, reason = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
+
+        if not self.elastic_search_client:
+            from calibre.gui2 import error_dialog
+            error_dialog(
+                self,
+                TITLE,
+                reason,
+                show=True)
+            self._set_idle_mode()
+            return
+
         res = self.elastic_search_client.search(index='library', body=json.dumps(req))
 
         hits_number = res['hits']['total']['value']
@@ -554,7 +580,16 @@ class SearchDialog(Qt.QDialog):
 
         if question_dialog(self, TITLE, 'You are about to rebuild all fulltext search index. This process might take a while. Are you sure?', default_yes=False):
 
-            self.elastic_search_client = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
+            self.elastic_search_client, reason = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
+
+            if not self.elastic_search_client:
+                from calibre.gui2 import error_dialog
+                error_dialog(
+                    self,
+                    TITLE,
+                    reason,
+                    show=True)
+                return
 
             if not self.elastic_search_client.ping():
                 from calibre.gui2 import error_dialog
