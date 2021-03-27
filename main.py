@@ -121,26 +121,19 @@ class SearchDialog(Qt.QDialog):
 
         self.layout.addLayout(self.search_text_layout)
 
-        self.search_button_layout = Qt.QHBoxLayout()
-        self.search_button_layout.setSpacing(0)
-
-        self.search_button = Qt.QPushButton('&Search', self)
-        self.search_button.setEnabled(False)
-        self.search_button.setDefault(True)
+        self.search_button = Qt.QToolButton()
+        self.search_button.setToolButtonStyle(QtCore.ToolButtonTextBesideIcon)
+        self.search_button.setText('&Search')
+        self.search_button.setPopupMode(Qt.QToolButton.MenuButtonPopup)
         self.search_button.clicked.connect(self.on_search_all)
-        self.search_button_layout.addWidget(self.search_button)
+        self.search_dropdown = Qt.QMenu()
+        self.search_dropdown.addAction('Search in the &whole library', self.on_search_all)
+        self.search_dropdown.addAction('Search in &selected books', self.on_search_selected)
+        self.search_button.setMenu(self.search_dropdown)
+        search_button_size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        self.search_button.setSizePolicy(search_button_size_policy)
 
-        self.custom_search_button = Qt.QPushButton('', self)
-        self.custom_search_button.setMaximumWidth(self.custom_search_button.iconSize().width())
-        self.custom_search_button.setEnabled(False)
-        self.search_button_layout.addWidget(self.custom_search_button)
-
-        self.custom_search_button_dropdown = QtWidgets.QMenu(self)
-        self.custom_search_button_dropdown.addAction('Search in the whole library', self.on_search_all)
-        self.custom_search_button_dropdown.addAction('Search in selected books', self.on_search_selected)
-        self.custom_search_button.setMenu(self.custom_search_button_dropdown)
-
-        self.layout.addLayout(self.search_button_layout)
+        self.layout.addWidget(self.search_button)
 
         self.cancel_button = Qt.QPushButton('&Cancel', self)
         self.cancel_button.clicked.connect(self.on_cancel)
@@ -176,17 +169,21 @@ class SearchDialog(Qt.QDialog):
 
         self.layout.addStretch()
 
-        self.reindex_layout = Qt.QHBoxLayout()
 
-        self.reindex_button = Qt.QPushButton('Reindex &new books', self)
+
+        self.reindex_button = Qt.QToolButton()
+        self.reindex_button.setToolButtonStyle(QtCore.ToolButtonTextBesideIcon)
+        self.reindex_button.setText('Reindex &new books')
+        self.reindex_button.setPopupMode(Qt.QToolButton.MenuButtonPopup)
         self.reindex_button.clicked.connect(self.on_reindex)
-        self.reindex_layout.addWidget(self.reindex_button)
+        self.reindex_dropdown = Qt.QMenu()
+        self.reindex_dropdown.addAction('Reindex &new books', self.on_reindex)
+        self.reindex_dropdown.addAction('Reindex &all books', self.on_reindex_all)
+        self.reindex_button.setMenu(self.reindex_dropdown)
+        reindex_button_size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        self.reindex_button.setSizePolicy(reindex_button_size_policy)
 
-        self.reindex_all_button = Qt.QPushButton('Reindex &all books', self)
-        self.reindex_all_button.clicked.connect(self.on_reindex_all)
-        self.reindex_layout.addWidget(self.reindex_all_button)
-
-        self.layout.addLayout(self.reindex_layout)
+        self.layout.addWidget(self.reindex_button)
 
         self.conf_button = Qt.QPushButton('&Options...', self)
         self.conf_button.clicked.connect(self.on_config)
@@ -545,10 +542,9 @@ class SearchDialog(Qt.QDialog):
         self.search_textbox.setEnabled(True)
         self.search_help_button.setEnabled(True)
         self.reindex_button.setEnabled(True)
-        self.reindex_all_button.setEnabled(True)
+        # self.reindex_all_button.setEnabled(True)
         self.conf_button.setEnabled(True)
         self.search_button.setVisible(True)
-        self.custom_search_button.setVisible(True)
         self.readme_button.setEnabled(True)
         self.close_button.setEnabled(True)
         self.cancel_button.setEnabled(True)
@@ -563,9 +559,8 @@ class SearchDialog(Qt.QDialog):
         self.search_textbox.setEnabled(False)
         self.search_help_button.setEnabled(False)
         self.reindex_button.setEnabled(False)
-        self.reindex_all_button.setEnabled(False)
+        # self.reindex_all_button.setEnabled(False)
         self.search_button.setVisible(False)
-        self.custom_search_button.setVisible(False)
         self.readme_button.setEnabled(False)
         self.conf_button.setEnabled(False)
         self.close_button.setEnabled(False)
@@ -588,7 +583,6 @@ class SearchDialog(Qt.QDialog):
 
     def on_search_text_changed(self, text):
         self.search_button.setEnabled(text != '')
-        self.custom_search_button.setEnabled(text != '')
 
     def reject(self):
         if self.close_button.isEnabled():
