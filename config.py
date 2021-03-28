@@ -34,7 +34,7 @@ class ConfigWidget(QWidget):
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
 
-        self.engine_location_label = QLabel('ElasticSearch engine location:')
+        self.engine_location_label = QLabel('ElasticSearch engine network path:')
         self.layout.addWidget(self.engine_location_label)
 
         self.elasticsearch_url_textbox = QLineEdit(self)
@@ -44,7 +44,7 @@ class ConfigWidget(QWidget):
 
         self.layout.addSpacing(10)
 
-        self.engine_launch_path_label = QLabel('Path to ElasticSearch:')
+        self.engine_launch_path_label = QLabel('ElasticSearch local path:')
         self.layout.addWidget(self.engine_launch_path_label)
 
         self.elasticsearch_launch_path_textbox = QLineEdit(self)

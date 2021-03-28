@@ -1,7 +1,7 @@
 Calibre Power Search Plugin
 ===========================
 
-Version 1.7.0, released on 4 Nov 2020. Created by Michael Apozyan
+Version 2.0.0, released on 29 Mar 2021. Created by Michael Apozyan
 
 Overview
 --------
@@ -33,13 +33,19 @@ Requirements
 Configuring
 -----------
 
-* ElasticSearch engine location
+* ElasticSearch engine network path
     If you installed ElasticSearch locally, it will usually be available at http://localhost:9200/
     so you don't need to modify this setting. However, you can change it if you need different
     setup.
 
-* Path to pdftotext tool
-    If pdftotext tool can not be found in PATH, enter the full path to pdftotext.
+* ElasticSearch engine local path (optional)
+    Example: c:\programs\elasticsearch-7.8.1
+    If you plan to run ElasticSearch locally, PowerSearch might be set up to launch it in the
+    background when needed. Just point here to the home directory where ElasticSearch is located.
+    Note that in this case PowerSearch will manage to stop ElasticSearch when you close Calibre.
+
+* Path to pdftotext tool (optional)
+    If pdftotext tool can not be found in PATH, enter the full path to pdftotext executable file.
 
 * Number of parallel processes for text extraction
     By default this number is equal to number of CPUs on your system minus one. You can change it

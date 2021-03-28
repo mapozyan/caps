@@ -214,7 +214,7 @@ class SearchDialog(Qt.QDialog):
         if 'version' not in prefs:
             file_formats = set(prefs['file_formats'].split(',') + ARCHIVE_FORMATS)
             prefs['file_formats'] = ','.join(file_formats)
-            prefs['version'] = CapsPlugin.version
+        prefs['version'] = CapsPlugin.version
 
     def _get_pdftotext_full_path(self):
 
@@ -260,7 +260,8 @@ class SearchDialog(Qt.QDialog):
             try:
                 text = self.search_textbox.itemText(i)
                 json_dumps(text)
-                search_lru[i] = text
+                if text:
+                    search_lru[i] = text
             except TypeError as ex:
                 pass
         prefs['search_lru'] = search_lru
