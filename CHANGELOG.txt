@@ -1,3 +1,6 @@
+## 2.0.1 2021-04-04 Bugfixes
+- Fix connection to ElasticSearch
+
 ## 2.0.0 2021-03-28 Major feature update
 - Add 7Z, ZIP, RAR archives support
 - Add option of launching local ElasticSearch if it's not running

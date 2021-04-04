@@ -122,6 +122,7 @@ class SearchDialog(Qt.QDialog):
         self.layout.addLayout(self.search_text_layout)
 
         self.search_button = Qt.QToolButton()
+        self.search_button.setEnabled(False)
         self.search_button.setToolButtonStyle(QtCore.ToolButtonTextBesideIcon)
         self.search_button.setText('&Search')
         self.search_button.setPopupMode(Qt.QToolButton.MenuButtonPopup)
@@ -456,14 +457,10 @@ class SearchDialog(Qt.QDialog):
             res = self.elastic_search_client.index(index='library', id=id, body=doc)
             print('Book {} "{}" in index'.format(id, res['result']))
 
-            # print('Book {} "{}" in index'.format(id, args['input']))
-
             if 'index_state' not in prefs[self.db.library_id]:
                 prefs[self.db.library_id]['index_state'] = {}
             prefs[self.db.library_id]['index_state'][id] = args['last_modified']
             prefs.commit()
-
-
 
         except Exception as ex:
             print(ex)
@@ -492,8 +489,7 @@ class SearchDialog(Qt.QDialog):
             }
         }
 
-        if not self.elastic_search_client:
-            self.elastic_search_client, reason = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
+        self.elastic_search_client, reason = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
 
         if not self.elastic_search_client:
             from calibre.gui2 import error_dialog
@@ -505,10 +501,10 @@ class SearchDialog(Qt.QDialog):
             self._set_idle_mode()
             return
 
-        res = self.elastic_search_client.search(index='library', body=json.dumps(req))
+        res = self.elastic_search_client.search(index='library', body=json.dumps(req), ignore=[404])
 
-        hits_number = res['hits']['total']['value']
-        page_size = len(res['hits']['hits'])
+        hits_number = res.get('hits', {}).get('total', {}).get('value', 0)
+        page_size = len(res.get('hits', {}).get('hits', []))
 
         matched_ids = set()
 
@@ -516,7 +512,7 @@ class SearchDialog(Qt.QDialog):
             if not res['hits']['hits']:
                 req['from'] = i
                 req['size'] = page_size
-                res = self.elastic_search_client.search(index='library', body=json.dumps(req))
+                res = self.elastic_search_client.search(index='library', body=json.dumps(req), ignore=[404])
 
             curr = res['hits']['hits'].pop(0)
             id = int(curr['_id'].split(':')[0])
@@ -543,7 +539,6 @@ class SearchDialog(Qt.QDialog):
         self.search_textbox.setEnabled(True)
         self.search_help_button.setEnabled(True)
         self.reindex_button.setEnabled(True)
-        # self.reindex_all_button.setEnabled(True)
         self.conf_button.setEnabled(True)
         self.search_button.setVisible(True)
         self.readme_button.setEnabled(True)
@@ -560,7 +555,6 @@ class SearchDialog(Qt.QDialog):
         self.search_textbox.setEnabled(False)
         self.search_help_button.setEnabled(False)
         self.reindex_button.setEnabled(False)
-        # self.reindex_all_button.setEnabled(False)
         self.search_button.setVisible(False)
         self.readme_button.setEnabled(False)
         self.conf_button.setEnabled(False)

@@ -18,6 +18,6 @@ def subprocess_call(cmdline):
 
     return subprocess.call(cmdline, stdout=FNULL, stderr=FNULL, creationflags=_get_creation_flags())
 
-def subprocess_popen(cmdline):
+def subprocess_popen(cmdline, shell=False):
 
-    return subprocess.Popen(cmdline, stdout=FNULL, stderr=FNULL, creationflags=_get_creation_flags())
+    return subprocess.Popen(cmdline, stdout=FNULL, stderr=FNULL, creationflags=_get_creation_flags(), shell=shell)

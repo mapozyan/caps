@@ -9,21 +9,80 @@ import os
 import psutil
 import time
 
+if os.name == 'nt':
+    import ctypes
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+
+
 url = None
 launch_path = None
 elasticsearch_process = None
+elasticsearch_subprocess = None
 msgbox = None
 ok = False
 
 def terminate_elasticsearch_process():
     global launch_path
     global elasticsearch_process
+    global elasticsearch_subprocess
 
     if elasticsearch_process:
         if os.name == 'nt':
-            subprocess_call([os.path.join(launch_path, 'bin', 'elasticsearch-service.bat'), 'stop'])
+            service_control_script = os.path.join(launch_path, 'bin', 'elasticsearch-service.bat')
+            if os.path.isfile(service_control_script):
+                subprocess_call([service_control_script, 'stop'])
+            else:
+                if elasticsearch_subprocess:
+                    try:
+                        children = [c for c in elasticsearch_subprocess.children(recursive=True)]
+                        for child in children:
+                            try:
+                                child.terminate()
+                            except Exception:
+                                pass
+                        try:
+                            elasticsearch_subprocess.terminate()
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
         else:
-            elasticsearch_process.terminate()
+            try:
+                elasticsearch_process.terminate()
+            except Exception:
+                pass
+
+    elasticsearch_process = None
+    elasticsearch_subprocess = None
+
+def worker(hwnd, lParam):
+    pid = ctypes.wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    if pid.value == lParam:
+        user32.ShowWindow(hwnd, 6)
+    return True
+
+def minimize(process):
+
+    WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    user32.EnumWindows.argtypes = [
+        WNDENUMPROC,
+        wintypes.LPARAM]
+
+    user32.GetWindowTextLengthW.argtypes = [
+        wintypes.HWND]
+
+    user32.GetWindowTextW.argtypes = [
+        wintypes.HWND,
+        wintypes.LPWSTR,
+        ctypes.c_int]
+
+    cb_worker = WNDENUMPROC(worker)
+    if not user32.EnumWindows(cb_worker, process.pid):
+        raise ctypes.WinError()
+
 
 class Launcher(Qt.QRunnable):
 
@@ -32,21 +91,33 @@ class Launcher(Qt.QRunnable):
         global url
         global launch_path
         global elasticsearch_process
+        global elasticsearch_subprocess
         global msgbox
         global ok
 
         try:
+
             if os.name == 'nt':
-                subprocess_call([os.path.join(launch_path, 'bin', 'elasticsearch-service.bat'), 'install'])
-                subprocess_popen([os.path.join(launch_path, 'bin', 'elasticsearch-service.bat'), 'start'])
-                time.sleep(1)
-                elasticsearch_process = [proc for proc in psutil.process_iter() if 'elasticsearch-service' in proc.name()]
-                if elasticsearch_process:
-                    elasticsearch_process = elasticsearch_process[0]
+                service_control_script = os.path.join(launch_path, 'bin', 'elasticsearch-service.bat')
+                if os.path.isfile(service_control_script):
+                    subprocess_call([service_control_script, 'install'])
+                    subprocess_popen([service_control_script, 'start'])
+                    time.sleep(1)
+                    elasticsearch_process = [proc for proc in psutil.process_iter() if 'elasticsearch-service' in proc.name()]
+                    if elasticsearch_process:
+                        elasticsearch_process = elasticsearch_process[0]
+                    else:
+                        elasticsearch_process = None
                 else:
-                    elasticsearch_process = None
+                    elasticsearch_process = subprocess_popen([os.path.join(launch_path, 'bin', 'elasticsearch.exe'), '-d'], shell=True)
+                    time.sleep(1)
+                    children = list(psutil.Process(elasticsearch_process.pid).children(recursive=False))
+                    if children:
+                        elasticsearch_subprocess = children[0]
+                        minimize(elasticsearch_subprocess)
             else:
                 elasticsearch_process = subprocess_popen([os.path.join(launch_path, 'bin', 'elasticsearch')])
+
             atexit.register(terminate_elasticsearch_process)
             start_time = time.time()
             while msgbox is not None and time.time() - start_time < 60:
@@ -94,14 +165,10 @@ class LaunchMessageBox(Qt.QDialog):
 
 
     def cancel(self):
-        global elasticsearch_process
-
-        if elasticsearch_process:
-            try:
-                elasticsearch_process.terminate()
-            except Exception as ex:
-                pass
-            elasticsearch_process = None
+        try:
+            terminate_elasticsearch_process()
+        except Exception:
+            pass
         self.reason = 'Operation cancelled'
         Qt.QDialog.reject(self)
 
@@ -151,7 +218,7 @@ def get_elasticsearch_client(parent, title, _url, _launch_path):
                         }
                     }
                 }
-                elastic_search_client.search(index='library', body=json.dumps(req))
+                elastic_search_client.search(index='library', body=json.dumps(req), ignore=[404])
                 ok = True
                 break
 
