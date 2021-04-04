@@ -18,7 +18,7 @@ from calibre_plugins.caps.config import prefs, ARCHIVE_FORMATS
 from calibre_plugins.caps.elasticsearch_helper import get_elasticsearch_client
 from calibre_plugins.caps.subprocess_helper import subprocess_call
 from PyQt5 import Qt, QtWidgets
-from PyQt5.QtCore import Qt as QtCore
+from PyQt5.QtCore import pyqtSignal, Qt as QtCore
 
 TITLE = 'Power Search'
 
@@ -78,6 +78,8 @@ class ScrollMessageBox(Qt.QDialog):
 
 class SearchDialog(Qt.QDialog):
 
+    key_pressed = pyqtSignal(int)
+
     def __init__(self, plugin, gui, icon):
 
         Qt.QDialog.__init__(self, gui)
@@ -92,6 +94,8 @@ class SearchDialog(Qt.QDialog):
         self.setWindowTitle(TITLE)
         self.setWindowIcon(icon)
         self.setWindowFlags(QtCore.Window | QtCore.WindowTitleHint | QtCore.CustomizeWindowHint)
+
+        max_fit_size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
 
         self.layout = Qt.QVBoxLayout()
         self.setLayout(self.layout)
@@ -112,7 +116,8 @@ class SearchDialog(Qt.QDialog):
         self.search_label.setBuddy(self.search_textbox)
         self.search_text_layout.addWidget(self.search_textbox)
 
-        self.search_help_button = Qt.QPushButton('?', self)
+        self.search_help_button = Qt.QToolButton(self)
+        self.search_help_button.setText('?')
         fixed_size_policy = self.search_help_button.sizePolicy()
         fixed_size_policy.setHorizontalPolicy(QtWidgets.QSizePolicy.Fixed)
         self.search_help_button.setSizePolicy(fixed_size_policy)
@@ -121,7 +126,7 @@ class SearchDialog(Qt.QDialog):
 
         self.layout.addLayout(self.search_text_layout)
 
-        self.search_button = Qt.QToolButton()
+        self.search_button = Qt.QToolButton(self)
         self.search_button.setEnabled(False)
         self.search_button.setToolButtonStyle(QtCore.ToolButtonTextBesideIcon)
         self.search_button.setText('&Search')
@@ -131,14 +136,16 @@ class SearchDialog(Qt.QDialog):
         self.search_dropdown.addAction('Search in the &whole library', self.on_search_all)
         self.search_dropdown.addAction('Search in &selected books', self.on_search_selected)
         self.search_button.setMenu(self.search_dropdown)
-        search_button_size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        self.search_button.setSizePolicy(search_button_size_policy)
+        self.search_button.setSizePolicy(max_fit_size_policy)
 
         self.layout.addWidget(self.search_button)
 
-        self.cancel_button = Qt.QPushButton('&Cancel', self)
+        self.cancel_button = Qt.QToolButton(self)
+        self.cancel_button.setText('&Cancel')
         self.cancel_button.clicked.connect(self.on_cancel)
         self.cancel_button.setVisible(False)
+        self.cancel_button.setSizePolicy(max_fit_size_policy)
+
         self.layout.addWidget(self.cancel_button)
 
         self.status_label = Qt.QLabel()
@@ -152,7 +159,8 @@ class SearchDialog(Qt.QDialog):
         self.progress_bar.setSizePolicy(retain_size_policy)
         self.layout.addWidget(self.progress_bar)
 
-        self.details_button = Qt.QPushButton('&Details', self)
+        self.details_button = Qt.QPushButton(self)
+        self.details_button.setText('&Details')
         self.details_button.setVisible(False)
         retain_size_policy = self.details_button.sizePolicy()
         retain_size_policy.setRetainSizeWhenHidden(True)
@@ -170,9 +178,7 @@ class SearchDialog(Qt.QDialog):
 
         self.layout.addStretch()
 
-
-
-        self.reindex_button = Qt.QToolButton()
+        self.reindex_button = Qt.QToolButton(self)
         self.reindex_button.setToolButtonStyle(QtCore.ToolButtonTextBesideIcon)
         self.reindex_button.setText('Reindex &new books')
         self.reindex_button.setPopupMode(Qt.QToolButton.MenuButtonPopup)
@@ -181,21 +187,26 @@ class SearchDialog(Qt.QDialog):
         self.reindex_dropdown.addAction('Reindex &new books', self.on_reindex)
         self.reindex_dropdown.addAction('Reindex &all books', self.on_reindex_all)
         self.reindex_button.setMenu(self.reindex_dropdown)
-        reindex_button_size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        self.reindex_button.setSizePolicy(reindex_button_size_policy)
+        self.reindex_button.setSizePolicy(max_fit_size_policy)
 
         self.layout.addWidget(self.reindex_button)
 
-        self.conf_button = Qt.QPushButton('&Options...', self)
+        self.conf_button = Qt.QToolButton(self)
+        self.conf_button.setText('&Options...')
         self.conf_button.clicked.connect(self.on_config)
+        self.conf_button.setSizePolicy(max_fit_size_policy)
         self.layout.addWidget(self.conf_button)
 
-        self.readme_button = Qt.QPushButton('&Readme...', self)
+        self.readme_button = Qt.QToolButton(self)
+        self.readme_button.setText('&Readme...')
         self.readme_button.clicked.connect(self.on_readme)
+        self.readme_button.setSizePolicy(max_fit_size_policy)
         self.layout.addWidget(self.readme_button)
 
-        self.close_button = Qt.QPushButton('&Close', self)
+        self.close_button = Qt.QToolButton(self)
+        self.close_button.setText('&Close')
         self.close_button.clicked.connect(self.close)
+        self.close_button.setSizePolicy(max_fit_size_policy)
         self.layout.addWidget(self.close_button)
 
         self.thread_pool = Qt.QThreadPool()
@@ -216,6 +227,16 @@ class SearchDialog(Qt.QDialog):
             file_formats = set(prefs['file_formats'].split(',') + ARCHIVE_FORMATS)
             prefs['file_formats'] = ','.join(file_formats)
         prefs['version'] = CapsPlugin.version
+
+        self.key_pressed.connect(self.on_key_pressed)
+
+    def keyPressEvent(self, event):
+        super(SearchDialog, self).keyPressEvent(event)
+        self.key_pressed.emit(event.key())
+
+    def on_key_pressed(self, key):
+        if key == QtCore.Key_Return:
+            self.on_search_all()
 
     def _get_pdftotext_full_path(self):
 
