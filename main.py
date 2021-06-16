@@ -85,8 +85,7 @@ class SearchDialog(Qt.QDialog):
         Qt.QDialog.__init__(self, gui)
         self.plugin = plugin
         self.gui = gui
-        self.full_db = gui.current_db
-        self.db = gui.current_db.new_api
+        self._cache_locally_current_db_reference()
 
         self.elastic_search_client = None
         self.conversion_time_dict = {}
@@ -223,12 +222,33 @@ class SearchDialog(Qt.QDialog):
 
         self.ids = None
 
-        if 'version' not in prefs:
-            file_formats = set(prefs['file_formats'].split(',') + ARCHIVE_FORMATS)
-            prefs['file_formats'] = ','.join(file_formats)
-        prefs['version'] = CapsPlugin.version
+        self._upgrade_to_current_version()
 
         self.key_pressed.connect(self.on_key_pressed)
+
+    def _cache_locally_current_db_reference(self):
+        self.full_db = self.gui.current_db
+        self.db = self.full_db.new_api
+
+    def _upgrade_to_current_version(self):
+        old_version = tuple(prefs.get('version', [0, 0, 0]))
+        if old_version < CapsPlugin.version:
+            print('{}> Upgrade version from {} to {}'.format(TITLE, old_version, CapsPlugin.version))
+
+        if old_version < (1, 4, 0):
+            file_formats = set(prefs['file_formats'].split(',') + ARCHIVE_FORMATS)
+            prefs['file_formats'] = ','.join(file_formats)
+
+        if old_version < (2, 1, 0):
+            res = self._get_elasticsearch_client_or_show_error()
+            if not res:
+                return
+
+            self.elastic_search_client.indices.put_settings(body={'index.blocks.write': True}, index='library', ignore=[400, 404])
+            self.elastic_search_client.indices.clone('library', self._get_elasticsearch_library_name(), ignore=[400, 404])
+            self.elastic_search_client.indices.delete('library', ignore=[400, 404])
+
+        prefs['version'] = CapsPlugin.version
 
     def keyPressEvent(self, event):
         super(SearchDialog, self).keyPressEvent(event)
@@ -260,12 +280,16 @@ class SearchDialog(Qt.QDialog):
         self.on_search()
 
     def on_search(self):
+        self._cache_locally_current_db_reference()
         self.status_label.setText('')
         self._manage_lru()
         if prefs['autoindex']:
             self._reindex(self.do_search)
         else:
             self.do_search()
+
+    def _get_elasticsearch_library_name(self):
+        return 'calibre-library-{}'.format(self.db.library_id)
 
     def _manage_lru(self):
         current_text = self.search_textbox.currentText()
@@ -288,6 +312,32 @@ class SearchDialog(Qt.QDialog):
                 pass
         prefs['search_lru'] = search_lru
 
+    def _get_elasticsearch_client_or_show_error(self):
+
+        self.elastic_search_client, reason = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
+
+        if not self.elastic_search_client:
+            from calibre.gui2 import error_dialog
+            error_dialog(
+                self,
+                TITLE,
+                reason,
+                show=True)
+            self._set_idle_mode()
+            return False
+
+        if not self.elastic_search_client.ping():
+            from calibre.gui2 import error_dialog
+            error_dialog(
+                self,
+                TITLE,
+                'Could not connect to ElasticSearch cluster. Please make sure that it\'s running.',
+                show=True)
+            self._set_idle_mode()
+            return False
+
+        return True
+
     def _reindex(self, completion_proc=None):
         # Start conversion time dictionaries
         self.timer_start = {}
@@ -301,26 +351,8 @@ class SearchDialog(Qt.QDialog):
 
         self.canceled = threading.Event()
 
-        self.elastic_search_client, reason = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
-
-        if not self.elastic_search_client:
-            from calibre.gui2 import error_dialog
-            error_dialog(
-                self,
-                TITLE,
-                reason,
-                show=True)
-            self._set_idle_mode()
-            return
-
-        if not self.elastic_search_client.ping():
-            from calibre.gui2 import error_dialog
-            error_dialog(
-                self,
-                TITLE,
-                'Could not connect to ElasticSearch cluster. Please make sure that it\'s running.',
-                show=True)
-            self._set_idle_mode()
+        res = self._get_elasticsearch_client_or_show_error()
+        if not res:
             return
 
         index_state = prefs.get(self.db.library_id, {}).get('index_state', {})
@@ -438,7 +470,7 @@ class SearchDialog(Qt.QDialog):
                             if f.upper().endswith('.' + fmt):
                                 content += self.convert_book(os.path.join(curr_dir, f), fmt)
             except Exception as ex:
-                print(ex)
+                print('{}> {}'.format(TITLE, ex))
 
             return content
 
@@ -468,35 +500,35 @@ class SearchDialog(Qt.QDialog):
             if self.canceled.is_set():
                 return
             id = concat(args['book_id'], args['format'])
-            print('Book {} start processing: {}'.format(id, args['input']))
+            print('{}> Book {} start processing: {}'.format(TITLE, id, args['input']))
             content = self.convert_book(args['input'], args['format'])
 
             doc = {
                 'metadata': args['metadata'],
                 'content': content
             }
-            res = self.elastic_search_client.index(index='library', id=id, body=doc)
-            print('Book {} "{}" in index'.format(id, res['result']))
+            res = self.elastic_search_client.index(index=self._get_elasticsearch_library_name(), id=id, body=doc)
+            print('{}> Book {} "{}" in index'.format(TITLE, id, res['result']))
 
-            if 'index_state' not in prefs[self.db.library_id]:
+            if 'index_state' not in prefs.setdefault(self.db.library_id, {}):
                 prefs[self.db.library_id]['index_state'] = {}
             prefs[self.db.library_id]['index_state'][id] = args['last_modified']
             prefs.commit()
 
         except Exception as ex:
-            print(ex)
+            print('{}> {}'.format(TITLE, ex))
 
     def delete_book(self, args):
         try:
-            self.elastic_search_client.delete(index='library', id=args['book_id'], ignore=[404])
+            self.elastic_search_client.delete(index=self._get_elasticsearch_library_name(), id=args['book_id'], ignore=[404])
             # print('Deleted {}'.format(id['book_id']))
 
-            if 'index_state' in prefs[self.db.library_id]:
+            if 'index_state' in prefs.get(self.db.library_id, {}):
                 del prefs[self.db.library_id]['index_state'][args['book_id']]
                 prefs.commit()
 
         except Exception as ex:
-            print(ex)
+            print('{}> {}'.format(TITLE, ex))
 
     def do_search(self):
 
@@ -510,19 +542,11 @@ class SearchDialog(Qt.QDialog):
             }
         }
 
-        self.elastic_search_client, reason = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
-
-        if not self.elastic_search_client:
-            from calibre.gui2 import error_dialog
-            error_dialog(
-                self,
-                TITLE,
-                reason,
-                show=True)
-            self._set_idle_mode()
+        res = self._get_elasticsearch_client_or_show_error()
+        if not res:
             return
 
-        res = self.elastic_search_client.search(index='library', body=json.dumps(req), ignore=[404])
+        res = self.elastic_search_client.search(index=self._get_elasticsearch_library_name(), body=json.dumps(req), ignore=[404])
 
         hits_number = res.get('hits', {}).get('total', {}).get('value', 0)
         page_size = len(res.get('hits', {}).get('hits', []))
@@ -533,7 +557,7 @@ class SearchDialog(Qt.QDialog):
             if not res['hits']['hits']:
                 req['from'] = i
                 req['size'] = page_size
-                res = self.elastic_search_client.search(index='library', body=json.dumps(req), ignore=[404])
+                res = self.elastic_search_client.search(index=self._get_elasticsearch_library_name(), body=json.dumps(req), ignore=[404])
 
             curr = res['hits']['hits'].pop(0)
             id = int(curr['_id'].split(':')[0])
@@ -550,11 +574,11 @@ class SearchDialog(Qt.QDialog):
             self.max_conversion_time_seconds = self.conversion_time_dict[
                 max(self.conversion_time_dict, key=self.conversion_time_dict.get)]
             self.max_conversion_time = datetime.timedelta(seconds=self.max_conversion_time_seconds)
-            print('Book {} took the longest time to convert: {}'.format(
-                max(self.conversion_time_dict, key=self.conversion_time_dict.get), self.max_conversion_time))
+            print('{}> Book {} took the longest time to convert: {}'.format(
+                TITLE, max(self.conversion_time_dict, key=self.conversion_time_dict.get), self.max_conversion_time))
             self.timer_total_end = timer()
             self.timer_total = datetime.timedelta(seconds=(self.timer_total_end - self.timer_total_start))
-            print('Total time for conversion/indexing: {}'.format(self.timer_total))
+            print('{}> Total time for conversion/indexing: {}'.format(TITLE, self.timer_total))
 
     def _set_idle_mode(self):
         self.search_textbox.setEnabled(True)
@@ -613,44 +637,35 @@ class SearchDialog(Qt.QDialog):
         msgbox.exec_()
 
     def on_reindex(self):
+        self._cache_locally_current_db_reference()
         self.status_label.setText('')
         self._reindex()
 
     def on_reindex_all(self):
         from calibre.gui2 import question_dialog
 
+        self._cache_locally_current_db_reference()
+
         if question_dialog(self, TITLE, 'You are about to rebuild all fulltext search index. This process might take a while. Are you sure?', default_yes=False):
 
-            self.elastic_search_client, reason = get_elasticsearch_client(self, TITLE, prefs['elasticsearch_url'], prefs['elasticsearch_launch_path'])
-
-            if not self.elastic_search_client:
-                from calibre.gui2 import error_dialog
-                error_dialog(
-                    self,
-                    TITLE,
-                    reason,
-                    show=True)
-                return
-
-            if not self.elastic_search_client.ping():
-                from calibre.gui2 import error_dialog
-                error_dialog(
-                    self,
-                    TITLE,
-                    'Could not connect to ElasticSearch cluster. Please make sure that it\'s running.',
-                    show=True)
+            res = self._get_elasticsearch_client_or_show_error()
+            if not res:
                 return
 
             self.status_label.setText('')
 
-            self.elastic_search_client.indices.delete(index='library', ignore=[400, 404])
+            self.elastic_search_client.indices.delete(index=self._get_elasticsearch_library_name(), ignore=[400, 404])
 
-            prefs[self.db.library_id] = {'index_state': {}}
+            if self.db.library_id in prefs:
+                prefs[self.db.library_id] = {'index_state': {}}
+
             prefs.commit()
 
             self._reindex()
 
     def on_config(self):
+        self._cache_locally_current_db_reference()
+
         ok_pressed = self.plugin.do_user_config(parent=self)
         if ok_pressed:
             self.pdftotext_full_path = None
