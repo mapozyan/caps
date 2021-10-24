@@ -336,6 +336,33 @@ class SearchDialog(Qt.QDialog):
             self._set_idle_mode()
             return False
 
+        test_req = {
+            '_source': False,
+            'query': {
+                'simple_query_string': {
+                    'query': '',
+                }
+            }
+        }
+
+        res = None
+        for i in range(3):
+            try:
+                res = self.elastic_search_client.search(index=self._get_elasticsearch_library_name(), body=json.dumps(test_req), ignore=[404])
+                break
+            except Exception as ex:
+                time.sleep(0.5)
+
+        if not res:
+            from calibre.gui2 import error_dialog
+            error_dialog(
+                self,
+                TITLE,
+                'Could not connect to ElasticSearch cluster. Please make sure that it\'s running.',
+                show=True)
+            self._set_idle_mode()
+            return False
+
         return True
 
     def _reindex(self, completion_proc=None):
@@ -565,8 +592,8 @@ class SearchDialog(Qt.QDialog):
                 matched_ids.add(id)
 
         self.status_label.setText('Found {} books'.format(len(matched_ids)))
-        self.full_db.set_marked_ids(matched_ids)
-        self.gui.search.setEditText('marked:true')
+        self.full_db.set_marked_ids(dict.fromkeys(matched_ids, 'search_results'))
+        self.gui.search.setEditText('marked:search_results')
         self.gui.search.do_search()
 
         # If new books are found, it shows which file took the longest and also the total time of conversion/indexing
