@@ -216,8 +216,6 @@ class SearchDialog(Qt.QDialog):
         self.delete_workers_submitted = 0
         self.delete_workers_complete = 0
 
-        self.first_paint = True
-
         self.pdftotext_full_path = None
 
         self.ids = None
@@ -225,6 +223,9 @@ class SearchDialog(Qt.QDialog):
         self._upgrade_to_current_version()
 
         self.key_pressed.connect(self.on_key_pressed)
+
+        if 'geometry' in prefs:
+            self.restoreGeometry(prefs['geometry'])
 
     def _cache_locally_current_db_reference(self):
         self.full_db = self.gui.current_db
@@ -654,8 +655,15 @@ class SearchDialog(Qt.QDialog):
     def reject(self):
         if self.close_button.isEnabled():
             self.status_label.setText('')
-            prefs['geometry'] = self.saveGeometry()
             Qt.QDialog.reject(self)
+
+    def moveEvent(self, event):
+        prefs['geometry'] = self.saveGeometry()
+        return Qt.QDialog.moveEvent(self, event)
+
+    def resizeEvent(self, event):
+        prefs['geometry'] = self.saveGeometry()
+        return Qt.QDialog.resizeEvent(self, event)
 
     def on_readme(self):
         text = get_resources('README.txt')
@@ -711,13 +719,6 @@ class SearchDialog(Qt.QDialog):
 
         msgbox = ScrollMessageBox([text], 850, 350)
         msgbox.exec_()
-
-    def paintEvent(self, event):
-        if self.first_paint:
-            if 'geometry' in prefs:
-                self.restoreGeometry(prefs['geometry'])
-            self.first_paint = False
-        return Qt.QDialog.paintEvent(self, event)
 
     def clear_lru(self):
         self.search_textbox.clear()
