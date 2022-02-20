@@ -6,7 +6,7 @@ class CapsPlugin(InterfaceActionBase):
     description         = 'Enables Full-text Search'
     supported_platforms = ['linux', 'windows', 'osx']
     author              = 'Michael Apozyan'
-    version             = (2, 1, 1)
+    version             = (2, 1, 2)
     minimum_calibre_version = (0, 7, 53)
 
     actual_plugin       = 'calibre_plugins.caps.ui:CapsPlugin'

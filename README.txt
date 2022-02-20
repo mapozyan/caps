@@ -1,7 +1,7 @@
 Calibre Power Search Plugin
 ===========================
 
-Version 2.1.1, released on 24 October 2021. Created by Michael Apozyan
+Version 2.1.2, released on 20 February 2022. Created by Michael Apozyan
 
 Overview
 --------

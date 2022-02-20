@@ -1,3 +1,7 @@
+## 2.1.2 2022-02-20 Bugfixes
+- Fix crash on multi-display environments
+- Overcome limit of max 10k results
+
 ## 2.1.1 2021-10-24 Minor fixes
 - Mark search results with "marked:search_results"
 - Fix occasional error message on first ElasticSearch start
