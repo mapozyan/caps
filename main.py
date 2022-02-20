@@ -574,18 +574,17 @@ class SearchDialog(Qt.QDialog):
         if not res:
             return
 
-        res = self.elastic_search_client.search(index=self._get_elasticsearch_library_name(), body=json.dumps(req), ignore=[404])
+        res = self.elastic_search_client.search(index=self._get_elasticsearch_library_name(), body=json.dumps(req), scroll="1m", ignore=[404])
 
         hits_number = res.get('hits', {}).get('total', {}).get('value', 0)
         page_size = len(res.get('hits', {}).get('hits', []))
+        scroll_id = res['_scroll_id']
 
         matched_ids = set()
 
-        for i in range(hits_number):
+        for _ in range(hits_number):
             if not res['hits']['hits']:
-                req['from'] = i
-                req['size'] = page_size
-                res = self.elastic_search_client.search(index=self._get_elasticsearch_library_name(), body=json.dumps(req), ignore=[404])
+                res = self.elastic_search_client.scroll(scroll="1m", scroll_id=scroll_id, ignore=[404])
 
             curr = res['hits']['hits'].pop(0)
             id = int(curr['_id'].split(':')[0])
