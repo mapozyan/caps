@@ -17,8 +17,9 @@ from calibre_plugins.caps.async_worker import AsyncWorker
 from calibre_plugins.caps.config import prefs, ARCHIVE_FORMATS
 from calibre_plugins.caps.elasticsearch_helper import get_elasticsearch_client
 from calibre_plugins.caps.subprocess_helper import subprocess_call
-from PyQt5 import Qt, QtWidgets
-from PyQt5.QtCore import pyqtSignal, Qt as QtCore
+from PyQt5 import QtCore, QtWidgets
+from PyQt5.QtCore import pyqtSignal
+from PyQt5.Qt import Qt
 
 TITLE = 'Power Search'
 
@@ -47,42 +48,42 @@ def which(program):
 def concat(book_id, format):
     return '{}:{}'.format(book_id, format)
 
-class ScrollMessageBox(Qt.QDialog):
+class ScrollMessageBox(QtWidgets.QDialog):
     def __init__(self, items, width, height, *args, **kwargs):
-        Qt.QDialog.__init__(self, *args, **kwargs)
+        QtWidgets.QDialog.__init__(self, *args, **kwargs)
         self.setWindowTitle(TITLE)
-        self.layout = Qt.QVBoxLayout()
+        self.layout = QtWidgets.QVBoxLayout()
         self.setLayout(self.layout)
 
         icon = get_icons('images/icon.png')
-        self.icon = Qt.QLabel(self)
+        self.icon = QtWidgets.QLabel(self)
         self.icon.setPixmap(icon.pixmap(85, 80))
         self.layout.addWidget(self.icon)
 
-        scroll = Qt.QScrollArea(self)
+        scroll = QtWidgets.QScrollArea(self)
         scroll.setWidgetResizable(True)
-        self.content = Qt.QWidget()
+        self.content = QtWidgets.QWidget()
         scroll.setWidget(self.content)
-        lay = Qt.QVBoxLayout(self.content)
+        lay = QtWidgets.QVBoxLayout(self.content)
         for item in items:
-            lay.addWidget(Qt.QLabel(item, self))
+            lay.addWidget(QtWidgets.QLabel(item, self))
         self.layout.addWidget(scroll)
-        self.ok_button = Qt.QPushButton('&OK', self)
+        self.ok_button = QtWidgets.QPushButton('&OK', self)
         self.ok_button.setIcon(get_icons('images/ok.png'))
         self.ok_button.clicked.connect(self.close)
-        self.ok_layout = Qt.QHBoxLayout()
+        self.ok_layout = QtWidgets.QHBoxLayout()
         self.ok_layout.addStretch()
         self.ok_layout.addWidget(self.ok_button)
         self.layout.addLayout(self.ok_layout)
         self.setStyleSheet('QScrollArea{{min-width: {}px; min-height: {}px}}'.format(width, height))
 
-class SearchDialog(Qt.QDialog):
+class SearchDialog(QtWidgets.QDialog):
 
     key_pressed = pyqtSignal(int)
 
     def __init__(self, plugin, gui, icon):
 
-        Qt.QDialog.__init__(self, gui)
+        QtWidgets.QDialog.__init__(self, gui)
         self.plugin = plugin
         self.gui = gui
         self._cache_locally_current_db_reference()
@@ -92,22 +93,22 @@ class SearchDialog(Qt.QDialog):
 
         self.setWindowTitle(TITLE)
         self.setWindowIcon(icon)
-        self.setWindowFlags(QtCore.Window | QtCore.WindowTitleHint | QtCore.CustomizeWindowHint)
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowTitleHint | Qt.WindowType.CustomizeWindowHint)
 
         max_fit_size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
 
-        self.layout = Qt.QVBoxLayout()
+        self.layout = QtWidgets.QVBoxLayout()
         self.setLayout(self.layout)
 
-        self.search_label = Qt.QLabel('Enter &text to search in content')
+        self.search_label = QtWidgets.QLabel('Enter &text to search in content')
         self.layout.addWidget(self.search_label)
 
-        self.search_text_layout = Qt.QHBoxLayout()
+        self.search_text_layout = QtWidgets.QHBoxLayout()
 
-        self.search_textbox = Qt.QComboBox(self)
+        self.search_textbox = QtWidgets.QComboBox(self)
         self.search_textbox.setMinimumWidth(400)
         self.search_textbox.setEditable(True)
-        self.search_textbox.setInsertPolicy(Qt.QComboBox.NoInsert)
+        self.search_textbox.setInsertPolicy(QtWidgets.QComboBox.NoInsert)
         for _, value in sorted(prefs.get('search_lru', {}).items()):
             self.search_textbox.addItem(value)
         self.search_textbox.setEditText('')
@@ -115,7 +116,7 @@ class SearchDialog(Qt.QDialog):
         self.search_label.setBuddy(self.search_textbox)
         self.search_text_layout.addWidget(self.search_textbox)
 
-        self.search_help_button = Qt.QToolButton(self)
+        self.search_help_button = QtWidgets.QToolButton(self)
         self.search_help_button.setText('?')
         fixed_size_policy = self.search_help_button.sizePolicy()
         fixed_size_policy.setHorizontalPolicy(QtWidgets.QSizePolicy.Fixed)
@@ -125,13 +126,13 @@ class SearchDialog(Qt.QDialog):
 
         self.layout.addLayout(self.search_text_layout)
 
-        self.search_button = Qt.QToolButton(self)
+        self.search_button = QtWidgets.QToolButton(self)
         self.search_button.setEnabled(False)
-        self.search_button.setToolButtonStyle(QtCore.ToolButtonTextBesideIcon)
+        self.search_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.search_button.setText('&Search')
-        self.search_button.setPopupMode(Qt.QToolButton.MenuButtonPopup)
+        self.search_button.setPopupMode(QtWidgets.QToolButton.MenuButtonPopup)
         self.search_button.clicked.connect(self.on_search_all)
-        self.search_dropdown = Qt.QMenu()
+        self.search_dropdown = QtWidgets.QMenu()
         self.search_dropdown.addAction('Search in the &whole library', self.on_search_all)
         self.search_dropdown.addAction('Search in &selected books', self.on_search_selected)
         self.search_button.setMenu(self.search_dropdown)
@@ -139,7 +140,7 @@ class SearchDialog(Qt.QDialog):
 
         self.layout.addWidget(self.search_button)
 
-        self.cancel_button = Qt.QToolButton(self)
+        self.cancel_button = QtWidgets.QToolButton(self)
         self.cancel_button.setText('&Cancel')
         self.cancel_button.clicked.connect(self.on_cancel)
         self.cancel_button.setVisible(False)
@@ -147,18 +148,18 @@ class SearchDialog(Qt.QDialog):
 
         self.layout.addWidget(self.cancel_button)
 
-        self.status_label = Qt.QLabel()
-        self.status_label.setAlignment(QtCore.AlignCenter)
+        self.status_label = QtWidgets.QLabel()
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.layout.addWidget(self.status_label)
 
-        self.progress_bar = Qt.QProgressBar(self)
+        self.progress_bar = QtWidgets.QProgressBar(self)
         self.progress_bar.setVisible(False)
         retain_size_policy = self.progress_bar.sizePolicy()
         retain_size_policy.setRetainSizeWhenHidden(True)
         self.progress_bar.setSizePolicy(retain_size_policy)
         self.layout.addWidget(self.progress_bar)
 
-        self.details_button = Qt.QPushButton(self)
+        self.details_button = QtWidgets.QPushButton(self)
         self.details_button.setText('&Details')
         self.details_button.setVisible(False)
         retain_size_policy = self.details_button.sizePolicy()
@@ -171,18 +172,18 @@ class SearchDialog(Qt.QDialog):
         self.details_button.clicked.connect(self.on_details)
         self.layout.addWidget(self.details_button)
 
-        self.details = Qt.QListWidget(self)
+        self.details = QtWidgets.QListWidget(self)
         self.details.setVisible(False)
         self.layout.addWidget(self.details)
 
         self.layout.addStretch()
 
-        self.reindex_button = Qt.QToolButton(self)
-        self.reindex_button.setToolButtonStyle(QtCore.ToolButtonTextBesideIcon)
+        self.reindex_button = QtWidgets.QToolButton(self)
+        self.reindex_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.reindex_button.setText('Reindex &new books')
-        self.reindex_button.setPopupMode(Qt.QToolButton.MenuButtonPopup)
+        self.reindex_button.setPopupMode(QtWidgets.QToolButton.MenuButtonPopup)
         self.reindex_button.clicked.connect(self.on_reindex)
-        self.reindex_dropdown = Qt.QMenu()
+        self.reindex_dropdown = QtWidgets.QMenu()
         self.reindex_dropdown.addAction('Reindex &new books', self.on_reindex)
         self.reindex_dropdown.addAction('Reindex &all books', self.on_reindex_all)
         self.reindex_button.setMenu(self.reindex_dropdown)
@@ -190,25 +191,25 @@ class SearchDialog(Qt.QDialog):
 
         self.layout.addWidget(self.reindex_button)
 
-        self.conf_button = Qt.QToolButton(self)
+        self.conf_button = QtWidgets.QToolButton(self)
         self.conf_button.setText('&Options...')
         self.conf_button.clicked.connect(self.on_config)
         self.conf_button.setSizePolicy(max_fit_size_policy)
         self.layout.addWidget(self.conf_button)
 
-        self.readme_button = Qt.QToolButton(self)
+        self.readme_button = QtWidgets.QToolButton(self)
         self.readme_button.setText('&Readme...')
         self.readme_button.clicked.connect(self.on_readme)
         self.readme_button.setSizePolicy(max_fit_size_policy)
         self.layout.addWidget(self.readme_button)
 
-        self.close_button = Qt.QToolButton(self)
+        self.close_button = QtWidgets.QToolButton(self)
         self.close_button.setText('&Close')
         self.close_button.clicked.connect(self.close)
         self.close_button.setSizePolicy(max_fit_size_policy)
         self.layout.addWidget(self.close_button)
 
-        self.thread_pool = Qt.QThreadPool()
+        self.thread_pool = QtCore.QThreadPool()
 
         self.add_workers_submitted = 0
         self.add_workers_complete = 0
@@ -256,7 +257,7 @@ class SearchDialog(Qt.QDialog):
         self.key_pressed.emit(event.key())
 
     def on_key_pressed(self, key):
-        if key == QtCore.Key_Return:
+        if key == Qt.Key.Key_Return:
             self.on_search_all()
 
     def _get_pdftotext_full_path(self):
@@ -417,7 +418,7 @@ class SearchDialog(Qt.QDialog):
             self.add_workers_complete = 0
             self.delete_workers_submitted = len(self.delete_list)
             self.delete_workers_complete = 0
-            self.progress_bar.setMaximum(len(self.update_list) + len(self.delete_list) / 20)
+            self.progress_bar.setMaximum(len(self.update_list) + int(len(self.delete_list) / 20))
             for curr in self.update_list:
                 worker = AsyncWorker(self.add_book, curr)
                 worker.signals.started.connect(self.add_worker_started)
@@ -435,8 +436,8 @@ class SearchDialog(Qt.QDialog):
 
     def add_worker_started(self, args):
         id = concat(args['book_id'], args['format'])
-        item = Qt.QListWidgetItem('Converting {}'.format(args['input']))
-        item.setData(QtCore.UserRole, id)
+        item = QtWidgets.QListWidgetItem('Converting {}'.format(args['input']))
+        item.setData(Qt.ItemDataRole.UserRole, id)
         self.details.addItem(item)
         # Sets the initial timer for conversion
         self.timer_start.update({id: timer()})
@@ -445,7 +446,7 @@ class SearchDialog(Qt.QDialog):
         id = concat(args['book_id'], args['format'])
         for i in range(self.details.count()):
             item = self.details.item(i)
-            curr_id = item.data(QtCore.UserRole)
+            curr_id = item.data(Qt.ItemDataRole.UserRole)
             if curr_id == id:
                 self.details.takeItem(i)
                 # Get the conversion time for this book
@@ -621,7 +622,7 @@ class SearchDialog(Qt.QDialog):
         self.progress_bar.setVisible(False)
         self.details_button.setVisible(False)
         self.details.setVisible(False)
-        self.search_textbox.setFocus(QtCore.OtherFocusReason)
+        self.search_textbox.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _set_searching_mode(self):
         self.search_textbox.setEnabled(False)
@@ -654,15 +655,15 @@ class SearchDialog(Qt.QDialog):
     def reject(self):
         if self.close_button.isEnabled():
             self.status_label.setText('')
-            Qt.QDialog.reject(self)
+            QtWidgets.QDialog.reject(self)
 
     def moveEvent(self, event):
         prefs['geometry'] = self.saveGeometry()
-        return Qt.QDialog.moveEvent(self, event)
+        return QtWidgets.QDialog.moveEvent(self, event)
 
     def resizeEvent(self, event):
         prefs['geometry'] = self.saveGeometry()
-        return Qt.QDialog.resizeEvent(self, event)
+        return QtWidgets.QDialog.resizeEvent(self, event)
 
     def on_readme(self):
         text = get_resources('README.txt')

@@ -1,5 +1,4 @@
-from PyQt5 import Qt
-from PyQt5.QtCore import pyqtSignal, pyqtSlot, QObject
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, QObject, QRunnable
 
 class WorkerSignals(QObject):
     started = pyqtSignal(dict)
@@ -7,7 +6,7 @@ class WorkerSignals(QObject):
     error = pyqtSignal(tuple)
     result = pyqtSignal(object)
 
-class AsyncWorker(Qt.QRunnable):
+class AsyncWorker(QRunnable):
 
     def __init__(self, fn, *args, **kwargs):
         super(AsyncWorker, self).__init__()

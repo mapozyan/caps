@@ -2,8 +2,8 @@ import atexit
 from calibre_plugins.caps.elasticsearch import Elasticsearch
 from calibre_plugins.caps.subprocess_helper import subprocess_call, subprocess_popen
 import json
-from PyQt5 import Qt
-from PyQt5.QtCore import Qt as QtCore
+from PyQt5 import QtCore, QtWidgets
+from PyQt5.Qt import Qt
 from PyQt5.QtCore import pyqtSlot
 import os
 import psutil
@@ -84,7 +84,7 @@ def minimize(process):
         raise ctypes.WinError()
 
 
-class Launcher(Qt.QRunnable):
+class Launcher(QtCore.QRunnable):
 
     @pyqtSlot()
     def run(self):
@@ -127,41 +127,41 @@ class Launcher(Qt.QRunnable):
                 time.sleep(1)
 
             if msgbox:
-                Qt.QDialog.reject(msgbox)
+                QtWidgets.QDialog.reject(msgbox)
                 ok = True
 
         except Exception as ex:
             time.sleep(0.1)
             if msgbox:
                 msgbox.reason = 'Could not start ElasticSearch service. Please go to Options dialog and check your configuration.'
-                Qt.QDialog.reject(msgbox)
+                QtWidgets.QDialog.reject(msgbox)
 
-class LaunchMessageBox(Qt.QDialog):
+class LaunchMessageBox(QtWidgets.QDialog):
 
     def __init__(self, parent, title, *args, **kwargs):
-        Qt.QDialog.__init__(self, parent, *args, **kwargs)
+        QtWidgets.QDialog.__init__(self, parent, *args, **kwargs)
         self.setWindowTitle(title)
-        self.setWindowFlags(QtCore.Window | QtCore.WindowTitleHint | QtCore.CustomizeWindowHint)
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowTitleHint | Qt.WindowType.CustomizeWindowHint)
 
-        self.layout = Qt.QVBoxLayout()
+        self.layout = QtWidgets.QVBoxLayout()
         self.setLayout(self.layout)
 
         icon = get_icons('images/icon.png')
-        self.icon = Qt.QLabel(self)
+        self.icon = QtWidgets.QLabel(self)
         self.icon.setPixmap(icon.pixmap(42, 40))
         self.layout.addWidget(self.icon)
 
-        self.info_label = Qt.QLabel('Launching ElasticSearch...')
+        self.info_label = QtWidgets.QLabel('Launching ElasticSearch...')
         self.layout.addWidget(self.info_label)
 
-        self.cancel_button = Qt.QPushButton('&Cancel', self)
+        self.cancel_button = QtWidgets.QPushButton('&Cancel', self)
         self.cancel_button.clicked.connect(self.cancel)
         self.layout.addWidget(self.cancel_button)
 
         self.reason = None
 
         launcher = Launcher()
-        Qt.QThreadPool.globalInstance().start(launcher)
+        QtCore.QThreadPool.globalInstance().start(launcher)
 
 
     def cancel(self):
@@ -170,7 +170,7 @@ class LaunchMessageBox(Qt.QDialog):
         except Exception:
             pass
         self.reason = 'Operation cancelled'
-        Qt.QDialog.reject(self)
+        QtWidgets.QDialog.reject(self)
 
 
 def get_elasticsearch_client(parent, title, _url, _launch_path):

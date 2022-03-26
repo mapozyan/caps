@@ -1,7 +1,6 @@
 import multiprocessing
 from string import ascii_lowercase
 
-from PyQt5 import QtWidgets
 from PyQt5.Qt import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QCheckBox, Qt
 from calibre.utils.config import JSONConfig
 from calibre_plugins.caps.elasticsearch_helper import get_elasticsearch_client
@@ -82,8 +81,8 @@ class ConfigWidget(QWidget):
         self.formats_list = QListWidget(self)
         for fmt in SUPPORTED_FORMATS:
             item = QListWidgetItem(fmt)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Checked if fmt in file_formats else Qt.Unchecked)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked if fmt in file_formats else Qt.CheckState.Unchecked)
             self.formats_list.addItem(item)
         self.layout.addWidget(self.formats_list)
         self.formats_label.setBuddy(self.formats_list)
@@ -91,7 +90,7 @@ class ConfigWidget(QWidget):
         self.layout.addSpacing(10)
 
         self.autoindex_checkbox = QCheckBox("Automatically index new books on search", self)
-        self.autoindex_checkbox.setCheckState(Qt.Checked if prefs['autoindex'] else Qt.Unchecked)
+        self.autoindex_checkbox.setCheckState(Qt.CheckState.Checked if prefs['autoindex'] else Qt.CheckState.Unchecked)
         self.layout.addWidget(self.autoindex_checkbox)
 
         self.layout.addSpacing(10)
@@ -117,10 +116,10 @@ class ConfigWidget(QWidget):
             pass
         file_formats = []
         for i in range(len(SUPPORTED_FORMATS)):
-            if self.formats_list.item(i).checkState() == Qt.Checked:
+            if self.formats_list.item(i).checkState() == Qt.CheckState.Checked:
                 file_formats.append(self.formats_list.item(i).text())
         prefs['file_formats'] = ','.join(file_formats)
-        prefs['autoindex'] = True if self.autoindex_checkbox.checkState() == Qt.Checked else False
+        prefs['autoindex'] = True if self.autoindex_checkbox.checkState() == Qt.CheckState.Checked else False
 
     def on_clear_history(self):
         from calibre.gui2 import info_dialog

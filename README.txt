@@ -1,7 +1,7 @@
 Calibre Power Search Plugin
 ===========================
 
-Version 2.1.2, released on 20 February 2022. Created by Michael Apozyan
+Version 2.2.0, released on 27 March 2022. Created by Michael Apozyan
 
 Overview
 --------
@@ -27,7 +27,7 @@ Requirements
     Generally, Power Search Plugin is using Calibre's native converters to build full-text index.
     However, native PDF conversion is sometimes working too slow. To speed up this process, you
     can install pdftotext utility and plugin will make use of it. Pdftotext is part of Xpdf and
-    Poppler projects. Specifically for Debian/Ubuntu check for 'xpdf' or 'libpoppler73' apt
+    Poppler projects. Specifically for Debian/Ubuntu check for 'xpdf' or 'libpoppler' apt
     packages.
 
 Configuring

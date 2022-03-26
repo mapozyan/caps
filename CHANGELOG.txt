@@ -1,3 +1,6 @@
+## 2.2.0 2022-03-27 Add Calibre 6 support
+- Ensure compatibility with Qt6
+
 ## 2.1.2 2022-02-20 Bugfixes
 - Fix crash on multi-display environments
 - Overcome limit of max 10k results
